@@ -1,0 +1,52 @@
+{
+  "item": {
+    "id": "03db9c36-ae41-4134-9cfa-0a60a22cfb1d",
+    "knowledge_id": "柱体体积",
+    "difficulty_target": 3,
+    "stem": "已知一个柱体的底面积为 12，高为 5，则该柱体的体积为（   ）",
+    "options": {
+      "A": "60",
+      "B": "17",
+      "C": "7",
+      "D": "24"
+    },
+    "answer": "A",
+    "analysis": "柱体的体积公式为\\(V = Sh\\)，其中\\(S\\)为底面积，\\(h\\)为高。代入数据得\\(V = 12 \\times 5 = 60\\)。",
+    "meta": {
+      "source": "seed"
+    }
+  },
+  "reflection": {
+    "id": "03db9c36-ae41-4134-9cfa-0a60a22cfb1d",
+    "rel_score": 0.95,
+    "solvable": 1,
+    "answer_consistent": 1,
+    "winner": "A",
+    "difficulty_cmp": "harder",
+    "actual_difficulty": 10.0,
+    "is_diff_match": false,
+    "algorithm_difficulty_irt": 10.0,
+    "difficulty_strict_match_irt": 0,
+    "difficulty_soft_match_irt": 1,
+    "passrate": 0,
+    "passrate_irt_strict": 0,
+    "passrate_irt_soft": 1,
+    "token_usage": {
+      "irt": {
+        "prompt": 2648,
+        "completion": 25557,
+        "total": 28205
+      },
+      "reflection": {
+        "prompt": 831,
+        "completion": 5331,
+        "total": 6162
+      }
+    },
+    "strength": "考查基础公式，条件清晰，答案明确。",
+    "weakness": "系统判定难度 10.0 偏高，建议简化计算步骤以降低难度。",
+    "advice": null
+  },
+  "generation": 1,
+  "rank": 1
+}

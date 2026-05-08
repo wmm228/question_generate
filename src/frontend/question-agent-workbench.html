@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tutor 出题工作台</title>
+<link rel="stylesheet" href="/static/question-agent-workbench.css">
+<script>
+  MathJax = {
+    tex: {
+      inlineMath: [["$", "$"], ["\\(", "\\)"]],
+      displayMath: [["$$", "$$"]]
+    },
+    options: {
+      skipHtmlTags: ["script", "noscript", "style", "textarea", "pre"]
+    }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<script type="module" src="/static/generated/question-agent-workbench.js"></script>
+</head>
+<body>
+<div class="workspace-shell">
+  <aside class="workspace-sidebar" id="workspace-sidebar">
+    <div class="sidebar-brand">
+      <div>
+        <div class="sidebar-title">Question Workbench</div>
+        <div class="sidebar-subtitle">出题画像对话</div>
+      </div>
+    </div>
+
+    <button class="sidebar-primary" id="portrait-start-button" type="button">新建画像会话</button>
+
+    <section class="sidebar-panel session-panel">
+      <div class="sidebar-panel-title">对话历史</div>
+      <input id="session-search" class="sidebar-search" type="text" placeholder="搜索画像标题或摘要">
+      <div id="session-history-empty" class="sidebar-meta">当前还没有画像会话。</div>
+      <div id="session-history" class="session-history"></div>
+    </section>
+
+    <section class="sidebar-panel sidebar-panel-compact">
+      <div class="sidebar-panel-title">运行时状态</div>
+      <div id="runtime-badges" class="badge-row">
+        <span class="badge">等待加载</span>
+      </div>
+      <div id="runtime-summary" class="sidebar-meta">工作台会自动检查 OAH runtime。</div>
+      <button id="refresh-runtime-button" class="sidebar-secondary" type="button">刷新运行时</button>
+    </section>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-label">当前会话</div>
+        <div class="user-name" id="user-name">自动会话</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="resize-handle" id="sidebar-resize-handle" aria-hidden="true"></div>
+
+  <main class="workspace-main">
+    <div class="studio-grid" id="studio-grid">
+      <section class="chat-surface" id="chat-surface">
+        <div class="chat-shell">
+          <div class="chat-shell-head">
+            <div class="chat-title-block">
+              <div class="eyebrow">Question Chat</div>
+              <h1>主智能体出题工作台</h1>
+              <div class="chat-head-subtitle">中间只保留大对话窗口，围绕画像追问和出题生成展开。</div>
+            </div>
+            <div class="surface-actions">
+              <button id="toggle-sidebar-button" class="btn btn-secondary" type="button">折叠左栏</button>
+              <button id="toggle-inspector-button" class="btn btn-secondary" type="button">展开右栏</button>
+            </div>
+          </div>
+
+          <div class="chat-thread-card">
+            <div class="surface-head surface-head-sub">
+              <div>
+                <div class="surface-title">画像对话</div>
+                <div class="surface-subtitle" id="portrait-source">portrait: -</div>
+              </div>
+              <div id="portrait-badges" class="badge-row">
+                <span class="badge">等待开始</span>
+              </div>
+            </div>
+
+            <div id="portrait-chat" class="dialogue-list">
+              <div class="dialogue-card dialogue-assistant">
+                <div class="dialogue-role">assistant</div>
+                <div class="dialogue-text">点击“新建画像会话”，主智能体会先确认出题画像还缺哪些字段。</div>
+              </div>
+            </div>
+
+            <div class="chat-composer">
+              <textarea id="portrait-reply" class="dialogue-input" placeholder="继续补充老师要求，例如：难度先定 3，题型用简答题，暂时不要图片。"></textarea>
+              <div class="chat-composer-actions">
+                <span id="portrait-feedback" class="status">当前还没有画像文档。</span>
+                <button id="portrait-send-button" class="btn btn-primary" type="button">发送回复</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="resize-handle vertical" id="inspector-resize-handle" aria-hidden="true"></div>
+
+      <aside class="inspector-column" id="inspector-column">
+        <section class="inspector-card inspector-card-primary">
+          <div class="surface-head">
+            <div>
+              <div class="surface-title">当前画像状态</div>
+              <div class="surface-subtitle">当前会话状态、缺失信息、下一步提示都集中显示在这里。</div>
+            </div>
+            <div class="surface-actions surface-actions-tight">
+              <button id="session-refresh-button" class="btn btn-ghost" type="button">刷新</button>
+              <button id="session-open-latest-button" class="btn btn-ghost" type="button">最近会话</button>
+              <button id="session-new-button" class="btn btn-secondary" type="button">新建画像</button>
+            </div>
+          </div>
+
+          <div class="session-strip session-strip-side">
+            <div class="session-strip-main">
+              <div class="session-strip-title" id="session-strip-title">当前画像：未开始</div>
+              <div class="session-strip-meta" id="session-strip-meta">还没有活跃画像会话。</div>
+            </div>
+          </div>
+
+          <div id="portrait-errors" class="error-box">
+            <strong>缺失信息</strong>
+            <p>还没有启动画像对话。</p>
+          </div>
+
+          <div class="inspector-block">
+            <div class="mini-title">已确认字段</div>
+            <div id="portrait-checklist" class="checklist-box">
+              <div class="insight-empty">暂无已确认项。</div>
+            </div>
+          </div>
+
+          <div class="inspector-block">
+            <div class="mini-title">下一步</div>
+            <div id="portrait-next-step" class="next-step-box">下一步：等待主智能体开始追问。</div>
+          </div>
+        </section>
+
+        <section class="inspector-card">
+          <div class="surface-head">
+            <div>
+              <div class="surface-title">初始需求</div>
+              <div class="surface-subtitle">先写老师需求，再同步画像和参数。</div>
+            </div>
+            <div class="surface-actions surface-actions-tight">
+              <button id="portrait-sync-button" class="btn btn-ghost" type="button">同步画像到参数区</button>
+            </div>
+          </div>
+
+          <div class="inspector-input-wrap">
+            <textarea id="knowledge-point" placeholder="例如：围绕一次函数图像性质，出一道难度 2 的文本选择题，解析分步骤写清楚。"></textarea>
+          </div>
+
+          <div class="mode-launcher mode-launcher-stack">
+            <button class="mode-item active" type="button" data-workbench-preset="chat-basic" data-knowledge-point="函数图像性质" data-algorithm="direct" data-question-type="multiple_choice" data-content-mode="text">
+              <div class="mode-item-head">对话模式</div>
+              <div class="mode-item-subtitle">先补画像，再生成</div>
+            </button>
+            <button class="mode-item" type="button" data-workbench-preset="deep-solve" data-knowledge-point="一次函数图像性质" data-algorithm="cot" data-question-type="short_answer" data-content-mode="text">
+              <div class="mode-item-head">深度求解</div>
+              <div class="mode-item-subtitle">强调多步推理</div>
+            </button>
+            <button class="mode-item" type="button" data-workbench-preset="quiz-generation" data-knowledge-point="一元二次方程" data-algorithm="evoq" data-question-type="multiple_choice" data-content-mode="text">
+              <div class="mode-item-head">题目生成</div>
+              <div class="mode-item-subtitle">直接生成题稿</div>
+            </button>
+            <button class="mode-item" type="button" data-workbench-preset="deep-research" data-knowledge-point="函数单调性" data-algorithm="dear" data-question-type="short_answer" data-content-mode="text">
+              <div class="mode-item-head">深度研究</div>
+              <div class="mode-item-subtitle">拆解后再生成</div>
+            </button>
+            <button class="mode-item" type="button" data-workbench-preset="math-animator" data-knowledge-point="几何图形判读" data-algorithm="evoq" data-question-type="multiple_choice" data-content-mode="image" data-image-mode="required" data-image-placement="stem_image">
+              <div class="mode-item-head">数学动画</div>
+              <div class="mode-item-subtitle">优先图像题干</div>
+            </button>
+            <button class="mode-item" type="button" data-workbench-preset="visualize" data-knowledge-point="统计图表分析" data-algorithm="react" data-question-type="short_answer" data-content-mode="image" data-image-mode="optional" data-image-placement="explanation_image">
+              <div class="mode-item-head">可视化</div>
+              <div class="mode-item-subtitle">图表与解析联动</div>
+            </button>
+          </div>
+
+          <div class="inspector-actions">
+            <button id="validate-button" class="btn btn-secondary" type="button">校验规范</button>
+            <button id="generate-button" class="btn btn-primary" type="button">开始生成</button>
+          </div>
+          <div class="inspector-status-line">
+            <span id="generate-feedback" class="status">工作台初始化中。</span>
+          </div>
+        </section>
+
+        <section class="inspector-card">
+          <div class="surface-head">
+            <div>
+              <div class="surface-title">参数与结果</div>
+              <div class="surface-subtitle">这里承接画像 ready 后的参数、规范预览和最终产出。</div>
+            </div>
+            <div class="surface-actions surface-actions-tight">
+              <button id="session-sync-button" class="btn btn-ghost" type="button">同步到参数区</button>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>难度</span>
+              <select id="difficulty" name="difficulty">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>算法</span>
+              <select id="algorithm" name="algorithm"></select>
+            </label>
+            <label class="field">
+              <span>题型</span>
+              <select id="question-type" name="question_type"></select>
+            </label>
+            <label class="field">
+              <span>内容模式</span>
+              <select id="content-mode" name="content_mode"></select>
+            </label>
+          </div>
+
+          <div id="image-controls" class="form-grid">
+            <label class="field">
+              <span>图片模式</span>
+              <select id="image-mode" name="image_mode"></select>
+            </label>
+            <label class="field">
+              <span>图片位置</span>
+              <select id="image-placement" name="image_placement"></select>
+            </label>
+          </div>
+
+          <div id="request-badges" class="badge-row"></div>
+          <div id="request-summary" class="request-summary">请先开始画像对话。</div>
+
+          <details class="details-box" open>
+            <summary>规范预览</summary>
+            <pre id="spec-preview" class="pre-box">暂无规范结果。</pre>
+          </details>
+
+          <div id="result-view" class="result-view">
+            <div class="result-card">暂无结果。生成成功后，这里会显示题干、选项、解析和图片资产。</div>
+          </div>
+        </section>
+
+        <details class="inspector-folders">
+          <summary>更多运行信息</summary>
+
+          <section class="inspector-card">
+            <div class="surface-head">
+              <div>
+                <div class="surface-title">运行时诊断</div>
+                <div class="surface-subtitle">当前命中的 modelRef、工作区状态和 OAH 诊断。</div>
+              </div>
+            </div>
+            <pre id="runtime-diagnosis" class="pre-box">暂无诊断信息。</pre>
+          </section>
+
+          <section class="inspector-card">
+            <div class="surface-head">
+              <div>
+                <div class="surface-title">Contract</div>
+                <div class="surface-subtitle" id="contract-source">source: -</div>
+              </div>
+              <div id="contract-badges" class="badge-row">
+                <span class="badge">等待加载</span>
+              </div>
+            </div>
+            <pre id="contract-preview" class="pre-box">暂无 contract 数据。</pre>
+          </section>
+
+          <section class="inspector-card">
+            <div class="surface-head">
+              <div>
+                <div class="surface-title">执行进度</div>
+                <div class="surface-subtitle mono" id="progress-request-id">request_uuid: -</div>
+              </div>
+            </div>
+            <div id="progress-view" class="progress-list">
+              <div class="progress-item" data-state="pending">
+                <div class="progress-mark">0</div>
+                <div>
+                  <div class="progress-title">等待请求</div>
+                  <div class="progress-detail">发起生成后，这里会轮询状态接口并显示各阶段进度。</div>
+                </div>
+              </div>
+            </div>
+            <details class="details-box">
+              <summary>查看进度日志</summary>
+              <pre id="progress-logs" class="pre-box">暂无日志。</pre>
+            </details>
+          </section>
+
+          <section class="inspector-card">
+            <div class="surface-head">
+              <div>
+                <div class="surface-title">画像文档</div>
+                <div class="surface-subtitle">portrait.md</div>
+              </div>
+            </div>
+            <pre id="portrait-markdown" class="pre-box">暂无画像文档。</pre>
+          </section>
+        </details>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>

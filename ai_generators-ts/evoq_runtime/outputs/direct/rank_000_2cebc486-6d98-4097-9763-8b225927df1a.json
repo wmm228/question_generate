@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "2cebc486-6d98-4097-9763-8b225927df1a",
+    "knowledge_id": "һԪ���η���",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "方程x^2-5x+6=0的解是（   ）",
+    "options": {
+      "A": "x=2或x=3",
+      "B": "x=-2或x=-3",
+      "C": "x=1或x=6",
+      "D": "x=-1或x=-6"
+    },
+    "answer": "A",
+    "analysis": "本题考查一元二次方程的求解，属于基础题。\n\n解方程：\nx^2-5x+6=0\n\n把二次三项式因式分解：\nx^2-5x+6=(x-2)(x-3)\n\n所以原方程可化为：\n(x-2)(x-3)=0\n\n根据“若ab=0，则a=0或b=0”，可得：\nx-2=0 或 x-3=0\n\n解得：\nx=2 或 x=3\n\n因此正确选项是A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

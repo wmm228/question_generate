@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "11904841-fd44-40b4-bcab-72b32b89fc20",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个长方体的长、宽、高分别为4，3，2．若规定主视图反映“长和高”，左视图反映“宽和高”，俯视图反映“长和宽”，则这个长方体的俯视图面积为（　　）",
+    "options": {
+      "A": "6",
+      "B": "8",
+      "C": "12",
+      "D": "24"
+    },
+    "answer": "C",
+    "analysis": "解：长方体的三视图中：\n主视图对应“长和高”，左视图对应“宽和高”，俯视图对应“长和宽”。\n\n已知这个长方体的长为4，宽为3，高为2，\n所以俯视图是一个长为4、宽为3的矩形。\n\n因此俯视图的面积为：\n4×3=12。\n\n故正确选项为C。\n\n思路总结：本题直接考查长方体三视图的对应关系。俯视图看的是“上面”，反映的是长和宽，所以面积等于长×宽。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

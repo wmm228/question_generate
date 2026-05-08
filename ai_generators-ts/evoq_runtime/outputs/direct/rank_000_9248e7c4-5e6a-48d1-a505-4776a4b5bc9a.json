@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "9248e7c4-5e6a-48d1-a505-4776a4b5bc9a",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个圆锥的高为5，底面直径为8，它的主视图的高是（ ）",
+    "options": {
+      "A": "3",
+      "B": "4",
+      "C": "5",
+      "D": "8"
+    },
+    "answer": "C",
+    "analysis": "圆锥的主视图是从正面投影得到的图形，其形状为等腰三角形。主视图的高直接对应圆锥的高，与底面直径无关。因此，该圆锥的主视图高为5。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

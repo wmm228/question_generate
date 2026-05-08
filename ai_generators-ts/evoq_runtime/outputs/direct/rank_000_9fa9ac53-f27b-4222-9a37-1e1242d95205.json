@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "9fa9ac53-f27b-4222-9a37-1e1242d95205",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "已知圆锥的底面半径为4cm，高为3cm，其主视图是一个等腰三角形，则该三角形的底边长和高分别为（ ）",
+    "options": {
+      "A": "4cm, 3cm",
+      "B": "8cm, 3cm",
+      "C": "4cm, 5cm",
+      "D": "8cm, 5cm"
+    },
+    "answer": "B",
+    "analysis": "圆锥的主视图是从正面观察得到的投影，其形状为等腰三角形。底边长等于圆锥底面直径，即2×半径=2×4cm=8cm；高等于圆锥的高，即3cm。因此，主视图的底边长为8cm，高为3cm。故选B。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

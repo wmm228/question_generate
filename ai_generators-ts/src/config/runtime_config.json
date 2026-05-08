@@ -1,0 +1,35 @@
+{
+  "models": {
+    "default": "platform/kimi-k25",
+    "temperature": 0.7,
+    "print_cost": true,
+    "verbose": false
+  },
+  "generation": {
+    "output_dir": "output",
+    "max_retries": 2,
+    "language": "zh",
+    "subject": "physics-g9",
+    "difficulty": "medium",
+    "question_type": "auto",
+    "visual_mode": "optional",
+    "num_variants": 1,
+    "include_explanation": true,
+    "include_knowledge_points": true,
+    "require_visual_phrase": true,
+    "visual_dependency_retry_limit": 2,
+    "enable_evaluation": true,
+    "evaluation_scale": "1_to_5"
+  },
+  "provider": {
+    "oah_base_url": null,
+    "request_log_dir": "logs/oah_requests"
+  },
+  "image_irt": {
+    "provider": "oah",
+    "method": "irt",
+    "model": "platform/kimi-k25",
+    "input_mode": "multimodal",
+    "enabled": false
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "ad7b97b9-8832-4918-8431-93eaabf38a4b",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个圆锥的主视图是（ ）",
+    "options": {
+      "A": "等腰三角形",
+      "B": "等边三角形",
+      "C": "直角三角形",
+      "D": "梯形"
+    },
+    "answer": "A",
+    "analysis": "圆锥的主视图是从正面观察得到的平面图形。圆锥的底面是圆，顶点位于底面圆心的正上方，因此主视图的底边对应底面圆的直径，顶点到底边中点的连线为圆锥的高。由于圆锥的对称性，主视图的两条侧边长度相等，形成等腰三角形。等边三角形需要圆锥的高与底面半径满足特定比例（高=√3×半径），一般圆锥不满足此条件；直角三角形和梯形不符合圆锥的投影特征。因此正确答案为A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

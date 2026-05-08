@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "6621a104-29ee-472f-a577-8d6715dda4ac",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个直圆柱竖直放在水平桌面上，则它的三视图中，主视图、左视图、俯视图依次是（   ）",
+    "options": {
+      "A": "矩形、矩形、圆",
+      "B": "圆、圆、矩形",
+      "C": "矩形、圆、矩形",
+      "D": "圆、矩形、圆"
+    },
+    "answer": "A",
+    "analysis": "直圆柱竖直放置时，底面与桌面平行。\n\n根据三视图的定义：\n1. 主视图：从物体正面看。竖直放置的圆柱，从正面看到的是一个长方形（通常说矩形）。\n2. 左视图：从物体左面看。由于圆柱左右方向与前后方向对称，所以从左面看到的图形也还是矩形。\n3. 俯视图：从物体上面看。圆柱的上底面是一个圆，所以俯视图是圆。\n\n因此，主视图、左视图、俯视图依次是“矩形、矩形、圆”。\n故正确答案为A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

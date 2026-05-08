@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "3a9cf66e-7f37-466f-a21e-cf08f8a0ce06",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个正方体放在桌面上，从正面、左面和上面看到的图形分别都是正方形，则这个几何体是(   )",
+    "options": {
+      "A": "圆柱",
+      "B": "球",
+      "C": "正方体",
+      "D": "三棱柱"
+    },
+    "answer": "C",
+    "analysis": "根据常见几何体的三视图特征进行判断。\n\n正方体的三个方向视图特点如下：\n1. 从正面看，看到的是正方形；\n2. 从左面看，看到的是正方形；\n3. 从上面看，看到的还是正方形。\n\n再分别分析各选项：\n- A项：圆柱从正面看一般是长方形，从上面看是圆，不符合；\n- B项：球从各个方向看都是圆，不符合；\n- C项：正方体从正面、左面、上面看都是正方形，符合题意；\n- D项：三棱柱的视图中会出现长方形或三角形，不符合。\n\n因此，正确答案是C。\n\n解题思路：熟悉常见几何体的三视图特征，直接对应判断即可。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

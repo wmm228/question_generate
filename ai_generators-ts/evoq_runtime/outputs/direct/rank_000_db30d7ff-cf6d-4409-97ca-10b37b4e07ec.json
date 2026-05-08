@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "db30d7ff-cf6d-4409-97ca-10b37b4e07ec",
+    "knowledge_id": "由所看到的平面图形确定立体图形",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "某几何体的三视图如图所示：主视图和左视图均为矩形，俯视图为圆形。该几何体是（　　）",
+    "options": {
+      "A": "圆柱",
+      "B": "圆锥",
+      "C": "球体",
+      "D": "四棱柱"
+    },
+    "answer": "A",
+    "analysis": "根据三视图判断几何体的步骤：\n1. 主视图和左视图均为矩形，说明几何体在高度方向上规则且侧面垂直于底面；\n2. 俯视图为圆形，表明底面为圆形；\n3. 结合以上两点，该几何体应为圆柱（圆柱的主视图、左视图为矩形，俯视图为圆）；\n4. 排除其他选项：圆锥主视图为三角形，球体三视图均为圆，四棱柱俯视图为多边形，均不符合。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

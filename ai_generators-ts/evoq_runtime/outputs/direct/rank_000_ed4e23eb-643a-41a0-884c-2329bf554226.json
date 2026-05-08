@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "ed4e23eb-643a-41a0-884c-2329bf554226",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个长方体的长、宽、高分别为4，3，2，则它的主视图、左视图、俯视图的面积之和为（    ）",
+    "options": {
+      "A": "18",
+      "B": "26",
+      "C": "24",
+      "D": "20"
+    },
+    "answer": "B",
+    "analysis": "长方体的三视图分别对应三个不同面的形状，且都是长方形。\n主视图的面积=长×高=4×2=8；\n左视图的面积=宽×高=3×2=6；\n俯视图的面积=长×宽=4×3=12。\n所以三视图面积之和为8+6+12=26。\n故选B。\n\n思路点拨：解决这类三视图基础题时，关键是明确：\n1. 主视图一般反映“长和高”；\n2. 左视图一般反映“宽和高”；\n3. 俯视图一般反映“长和宽”。\n分别求出对应面积后相加即可。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

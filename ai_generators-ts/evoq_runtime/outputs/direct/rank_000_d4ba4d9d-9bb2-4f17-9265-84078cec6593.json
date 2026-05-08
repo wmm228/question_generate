@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "d4ba4d9d-9bb2-4f17-9265-84078cec6593",
+    "knowledge_id": "长方体表面积",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个长方体的长、宽、高分别为4 cm，3 cm，2 cm，则这个长方体的表面积是（ ）",
+    "options": {
+      "A": "24 cm²",
+      "B": "26 cm²",
+      "C": "52 cm²",
+      "D": "48 cm²"
+    },
+    "answer": "C",
+    "analysis": "解：长方体的表面积公式为：表面积＝2×（长×宽＋长×高＋宽×高）。\n已知长方体的长、宽、高分别为4 cm，3 cm，2 cm，\n则长×宽＝4×3＝12，\n长×高＝4×2＝8，\n宽×高＝3×2＝6。\n所以表面积＝2×（12＋8＋6）＝2×26＝52（cm²）。\n故正确答案为C。\n\n思路：直接应用长方体表面积公式计算即可，属于基础题。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

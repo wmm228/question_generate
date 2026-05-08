@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "862e843e-14ac-42e0-bac0-b83184f7115b",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个圆锥的主视图是（ ）",
+    "options": {
+      "A": "圆",
+      "B": "等腰三角形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "B",
+    "analysis": "圆锥的主视图是指从正面观察圆锥所得到的平面图形。在高中立体几何中，通常默认圆锥为直圆锥且底面水平放置。此时，圆锥的顶点投影到底面中心的上方，底面圆的直径投影为一条线段，两条母线投影为连接顶点与底面直径端点的线段。由于圆锥的母线长度相等，所以这两条投影线段长度相等，形成的图形是一个等腰三角形。圆通常是圆锥的俯视图，矩形是圆柱的主视图，梯形通常是圆台的主视图。因此，圆锥的主视图是等腰三角形。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

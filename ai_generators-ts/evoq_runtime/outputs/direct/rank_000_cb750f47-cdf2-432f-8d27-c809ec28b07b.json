@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "cb750f47-cdf2-432f-8d27-c809ec28b07b",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个几何体的主视图、左视图、俯视图都是边长为2的正方形，则这个几何体是（    ）",
+    "options": {
+      "A": "球",
+      "B": "圆柱",
+      "C": "正方体",
+      "D": "圆锥"
+    },
+    "answer": "C",
+    "analysis": "解：三视图是从不同方向观察几何体得到的平面图形。\n\n已知该几何体的主视图、左视图、俯视图都是边长为2的正方形。\n\n逐项判断：\nA项，球从任何方向看到的视图都是圆，不是正方形，所以A错误；\nB项，圆柱的俯视图是圆，主视图和左视图通常是矩形，不可能三个视图都是正方形，所以B错误；\nC项，正方体如果棱长为2，从正面、左面、上面看到的图形都是边长为2的正方形，符合题意，所以C正确；\nD项，圆锥的俯视图是圆，主视图一般是等腰三角形，不符合题意，所以D错误。\n\n故选：C。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

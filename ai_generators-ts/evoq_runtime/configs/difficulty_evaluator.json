@@ -1,0 +1,32 @@
+{
+  "irt": {
+    "models": [
+      "deepseek-v3__cot",
+      "ERNIE-Speed-128K__ps",
+      "gpt-5__ps",
+      "gpt-5__default",
+      "gpt-5-mini__ps",
+      "deepseek-v3__default",
+      "Spark Lite__hint",
+      "gpt-4o-2024-11-20__default",
+      "ERNIE-Speed-8K__default",
+      "ERNIE-Speed-8K__ps",
+      "deepseek-v3__ps",
+      "ERNIE-Tiny-8K__ps"
+    ],
+    "theta": {
+      "deepseek-v3__cot": 2.1562225111528597,
+      "ERNIE-Speed-128K__ps": -0.8788206709310187,
+      "gpt-5__ps": 4.68767960216943,
+      "gpt-5__default": 3.359926076692211,
+      "gpt-5-mini__ps": 4.219574946806543,
+      "deepseek-v3__default": 4.054563065217586,
+      "Spark Lite__hint": -1.4261649727527093,
+      "gpt-4o-2024-11-20__default": 1.1450464509689402,
+      "ERNIE-Speed-8K__default": -0.6205140805469449,
+      "ERNIE-Speed-8K__ps": -0.7486110023088791,
+      "deepseek-v3__ps": 2.3380303118048436,
+      "ERNIE-Tiny-8K__ps": -1.733752083647532
+    }
+  }
+}

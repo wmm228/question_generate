@@ -1,0 +1,42 @@
+{
+  "name": "tutor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "ts-node -P tsconfig.ai-generators.json --files src/server.ts",
+    "dev:local-oah": "ts-node -P tsconfig.ai-generators.json --files src/server-local-oah.ts",
+    "clean": "node tools/clean-build-output.js",
+    "build": "npm run clean && npm run build:server && npm run build:frontend",
+    "build:server": "tsc -p tsconfig.ai-generators.json",
+    "build:frontend": "tsc -p tsconfig.frontend.json",
+    "prestart": "npm run build",
+    "start": "node dist/src/server.js",
+    "start:local-oah": "node dist/src/server-local-oah.js",
+    "smoke:oah-question": "npm run build:server && node dist/src/tools/oah-question-smoke.js",
+    "test:ai-generate": "node tools/ai-generate-regression.js",
+    "lint": "npx eslint \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\"",
+    "lint:fix": "npx eslint \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\" --fix",
+    "format": "npx prettier --write \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\" \"*.{json,md}\"",
+    "format:check": "npx prettier --check \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\" \"*.{json,md}\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.5.0",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.46.2"
+  }
+}

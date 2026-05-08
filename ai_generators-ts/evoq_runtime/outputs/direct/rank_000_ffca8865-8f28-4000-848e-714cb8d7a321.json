@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "ffca8865-8f28-4000-848e-714cb8d7a321",
+    "knowledge_id": "һԪ���η���",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "已知关于x的方程$x^2-5x+6=0$，则该方程的两个实数根是（ ）",
+    "options": {
+      "A": "$x=2$或$x=3$",
+      "B": "$x=-2$或$x=-3$",
+      "C": "$x=1$或$x=6$",
+      "D": "$x=-1$或$x=-6$"
+    },
+    "answer": "A",
+    "analysis": "这是一个一元二次方程，先将左边因式分解：\n\n$x^2-5x+6=(x-2)(x-3)$。\n\n所以原方程可化为：\n\n$(x-2)(x-3)=0$。\n\n根据“两个因式乘积为0，则至少有一个因式为0”，可得：\n\n$x-2=0$ 或 $x-3=0$。\n\n解得：\n\n$x=2$ 或 $x=3$。\n\n因此方程的两个实数根是$x=2$和$x=3$，故选A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

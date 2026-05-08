@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "ccfd2e27-9b06-499b-8050-80e851634616",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "圆锥的主视图是（ ）",
+    "options": {
+      "A": "圆形",
+      "B": "矩形",
+      "C": "等腰三角形",
+      "D": "梯形"
+    },
+    "answer": "C",
+    "analysis": "[div]解：圆锥的主视图是从正面观察圆锥所得到的平面图形。[/div][div]当圆锥底面水平放置时，其主视图是一个等腰三角形。[/div][div]故选：C．[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

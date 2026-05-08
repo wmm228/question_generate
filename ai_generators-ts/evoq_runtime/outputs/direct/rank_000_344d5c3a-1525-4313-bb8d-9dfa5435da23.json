@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "344d5c3a-1525-4313-bb8d-9dfa5435da23",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个几何体的三视图如下：主视图是长方形，左视图是长方形，俯视图是长方形，则这个几何体最可能是（   ）",
+    "options": {
+      "A": "圆柱",
+      "B": "圆锥",
+      "C": "球",
+      "D": "长方体"
+    },
+    "answer": "D",
+    "analysis": "根据常见几何体的三视图特征进行判断。\n\nA项，圆柱的主视图和左视图一般是长方形，但俯视图是圆，不符合题意。\nB项，圆锥的主视图和左视图一般是三角形，俯视图是圆，不符合题意。\nC项，球从三个方向看到的图形都是圆，不符合题意。\nD项，长方体从正面、侧面、上面看到的图形都可以是长方形，符合题意。\n\n因此，这个几何体最可能是长方体。\n故选D。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

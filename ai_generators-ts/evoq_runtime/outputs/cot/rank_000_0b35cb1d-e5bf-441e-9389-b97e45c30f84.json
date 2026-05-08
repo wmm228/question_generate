@@ -1,0 +1,23 @@
+{
+  "item": {
+    "id": "0b35cb1d-e5bf-441e-9389-b97e45c30f84",
+    "knowledge_id": "柱体体积",
+    "difficulty_target": 3,
+    "stem": "已知圆柱的底面半径为 2，高为 3，则该圆柱的体积为（ ）",
+    "options": {
+      "A": "$6\\pi$",
+      "B": "$12\\pi$",
+      "C": "$18\\pi$",
+      "D": "$24\\pi$"
+    },
+    "answer": "B",
+    "analysis": "圆柱体积公式为$V=\\pi r^2 h$，代入底面半径$r=2$和高$h=3$，计算得$V=\\pi \\times 2^2 \\times 3 = 12\\pi$。",
+    "meta": {
+      "source": "baseline_cot",
+      "design_thought": "考察圆柱体积公式直接应用，设置常见计算错误为干扰项，难度较低。"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

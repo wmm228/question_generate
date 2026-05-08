@@ -1,0 +1,53 @@
+{
+  "llm": {
+    "temperature": 0.7,
+    "stream": false
+  },
+  "difficulty_evaluator": {
+    "method": "irt",
+    "provider": "oah",
+    "classba": {
+      "temperature": 0.01
+    },
+    "agicto": {
+      "temperature": 0.01
+    }
+  },
+  "baselines": {
+    "common": {
+      "count": 1
+    },
+    "cot_bon": {
+      "n": 3
+    },
+    "react": {
+      "max_turns": 1,
+      "thought_per_turn": 1
+    },
+    "dear": {
+      "max_depth": 3,
+      "max_branches": 2,
+      "max_iterations": 3,
+      "score_threshold": 7
+    },
+    "eqpr": {
+      "expand_width": 2,
+      "iteration_num": 3,
+      "max_depth": 3,
+      "min_depth": 2,
+      "w_exp": 2.5,
+      "threshold": null,
+      "simulate_expand_width": 1
+    }
+  },
+  "ga": {
+    "pop_size": 3,
+    "generations": 3,
+    "elite_ratio": 0.5,
+    "lambda_ratio": 1.0,
+    "init_strategy": "auto",
+    "selection_strategy": "tournament",
+    "tournament_k": 2,
+    "fitness_diff_metric": "irt_strict"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "f191212d-e1ec-4028-a0df-74782c1199ee",
+    "knowledge_id": "һԪ���η���",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "若关于x的一元二次方程$x^2-5x+6=0$，则它的两个根分别是（    ）",
+    "options": {
+      "A": "$x=2$或$x=3$",
+      "B": "$x=1$或$x=6$",
+      "C": "$x=-2$或$x=-3$",
+      "D": "$x=2$或$x=-3$"
+    },
+    "answer": "A",
+    "analysis": "由方程$x^2-5x+6=0$，可将左边因式分解：\n$$x^2-5x+6=(x-2)(x-3)$$\n所以原方程可化为：\n$$(x-2)(x-3)=0$$\n根据“两个因式的积等于0，则至少有一个因式等于0”，可得：\n$$x-2=0\\quad 或 \\quad x-3=0$$\n解得：\n$$x=2\\quad 或 \\quad x=3$$\n因此这个一元二次方程的两个根分别是2和3。\n故选A。\n\n另外也可用检验法验证：\n当$x=2$时，$2^2-5\\times2+6=4-10+6=0$；\n当$x=3$时，$3^2-5\\times3+6=9-15+6=0$。\n二者都满足原方程，因此答案正确。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "9a09cf38-7bdd-46a7-85f4-88aba496e52c",
+    "knowledge_id": "由所看到的平面图形确定立体图形",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "若一个几何体的主视图、左视图、俯视图均为圆，则该几何体是（ ）",
+    "options": {
+      "A": "球",
+      "B": "圆柱",
+      "C": "圆锥",
+      "D": "正方体"
+    },
+    "answer": "A",
+    "analysis": "[div]解：分别分析各常见几何体的三视图：[/div][div]球体的主视图、左视图、俯视图均为圆；[/div][div]圆柱的主视图、左视图为矩形，俯视图为圆；[/div][div]圆锥的主视图、左视图为三角形，俯视图为圆；[/div][div]正方体的主视图、左视图、俯视图均为正方形．[/div][div]故选：A．[/div]|本题考查由三视图确定立体图形，属于基础题.",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

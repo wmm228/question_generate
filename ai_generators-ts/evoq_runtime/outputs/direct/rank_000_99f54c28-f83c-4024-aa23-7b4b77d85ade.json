@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "99f54c28-f83c-4024-aa23-7b4b77d85ade",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "圆锥的主视图是（ ）",
+    "options": {
+      "A": "圆",
+      "B": "等腰三角形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "B",
+    "analysis": "圆锥是由一个圆形底面和一个侧面围成的几何体。当圆锥的底面水平放置时，从正面进行正投影（主视图），底面投影为一条线段（即底面直径），侧面的轮廓由两条母线构成。由于圆锥是旋转对称图形，左右两侧的母线长度相等，因此主视图是一个等腰三角形。故选 B。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

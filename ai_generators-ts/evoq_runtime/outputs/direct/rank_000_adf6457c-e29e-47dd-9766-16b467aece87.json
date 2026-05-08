@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "adf6457c-e29e-47dd-9766-16b467aece87",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个底面水平放置的圆锥，其主视图是（ ）",
+    "options": {
+      "A": "圆",
+      "B": "等腰三角形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "B",
+    "analysis": "[div]解：根据三视图的定义，主视图是从物体的正面观察所得到的投影图形。[/div][div]对于底面水平放置的圆锥，其主视图的轮廓由底面直径和两条母线组成。[/div][div]由于圆锥的母线长度相等，因此该图形是一个等腰三角形。[/div][div]故选：B。[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

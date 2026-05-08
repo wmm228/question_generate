@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "5ff1d765-ce14-464d-88b7-c00b2d73b6c0",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "已知圆锥的底面半径为3，高为4，则其主视图的面积为（ ）",
+    "options": {
+      "A": "9π",
+      "B": "12π",
+      "C": "12",
+      "D": "6"
+    },
+    "answer": "C",
+    "analysis": "圆锥的主视图为等腰三角形，其底边长度等于圆锥底面直径（2×3=6），高为圆锥的高（4）。根据三角形面积公式，主视图面积=1/2×底边×高=1/2×6×4=12。选项A、B涉及π，属于圆锥底面或侧面积的计算；选项D未正确应用面积公式。因此正确答案为C。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

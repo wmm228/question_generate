@@ -1,0 +1,23 @@
+{
+  "item": {
+    "id": "db51ba3c-e01b-467d-badb-7f9eab8d0c45",
+    "knowledge_id": "柱体体积",
+    "difficulty_target": 3,
+    "stem": "[div]已知圆柱的底面周长为\\(2\\pi\\)，高为 3，则该圆柱的体积为 (   )[/div]",
+    "options": {
+      "A": "3\\pi",
+      "B": "6\\pi",
+      "C": "9\\pi",
+      "D": "12\\pi"
+    },
+    "answer": "A",
+    "analysis": "[div]由题意，底面周长\\(2\\pi r=2\\pi\\)，解得\\(r=1\\)．[/div][div]体积\\(V=\\pi r^2 h=\\pi\\times1^2\\times3=3\\pi\\)．[/div][div]故选 A．[/div]",
+    "meta": {
+      "source": "baseline_cot",
+      "design_thought": "考察圆柱体积公式。由周长求半径，再算体积。设置混淆半径及计算错误的干扰项。"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

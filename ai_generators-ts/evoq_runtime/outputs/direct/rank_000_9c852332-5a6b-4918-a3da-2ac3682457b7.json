@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "9c852332-5a6b-4918-a3da-2ac3682457b7",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个长方体的长、宽、高都不相等，则它的主视图、左视图、俯视图的形状都一定是（    ）",
+    "options": {
+      "A": "三角形",
+      "B": "矩形",
+      "C": "梯形",
+      "D": "圆"
+    },
+    "answer": "B",
+    "analysis": "长方体由6个长方形面围成，从正面、左面和上面观察它，看到的平面图形分别是主视图、左视图、俯视图。|[div]由于长方体的各个面都是长方形，所以从三个方向看到的外轮廓都是矩形。[/div][div]其中：主视图一般表示“长和高”组成的矩形；左视图一般表示“宽和高”组成的矩形；俯视图一般表示“长和宽”组成的矩形。[/div][div]虽然长、宽、高都不相等，但这只会影响三个矩形的边长，不会改变图形的形状。[/div][div]因此，三视图的形状都一定是矩形。故选：B。[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "e3082ea7-c37c-48e9-8924-ef154301ca11",
+    "knowledge_id": "由所看到的平面图形确定立体图形",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个几何体的平面展开图由六个全等的正方形组成，则该几何体是（ ）",
+    "options": {
+      "A": "正方体",
+      "B": "长方体",
+      "C": "圆柱",
+      "D": "圆锥"
+    },
+    "answer": "A",
+    "analysis": "正方体的六个面均为全等的正方形，其平面展开图必然由六个全等的正方形组成。长方体的面至少包含矩形，圆柱的展开图包含圆形和矩形，圆锥的展开图包含圆形和扇形，均不符合题意。因此正确答案为正方体。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

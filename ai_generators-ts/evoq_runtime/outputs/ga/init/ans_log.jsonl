@@ -1,0 +1,39 @@
+{"method": "irt", "model": "deepseek-v3__cot", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "cot", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Speed-128K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-5__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-5__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-5-mini__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "deepseek-v3__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "Spark Lite__hint", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "hint", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-4o-2024-11-20__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Speed-8K__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Speed-8K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "deepseek-v3__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Tiny-8K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"final_predictions": {"irt_prediction": 10.0, "fallback_irt": []}, "token_usage": {"irt": {"prompt": 3185, "completion": 37340, "total": 40525}, "reflection": {"prompt": 0, "completion": 0, "total": 0}}}
+{"method": "irt", "model": "deepseek-v3__cot", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "cot", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Speed-128K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-5__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-5__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-5-mini__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "deepseek-v3__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "Spark Lite__hint", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "hint", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "gpt-4o-2024-11-20__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Speed-8K__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Speed-8K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "deepseek-v3__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"method": "irt", "model": "ERNIE-Tiny-8K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "A", "is_correct": 1, "ground_truth": "A"}
+{"final_predictions": {"irt_prediction": 10.0, "fallback_irt": []}, "token_usage": {"irt": {"prompt": 2648, "completion": 25557, "total": 28205}, "reflection": {"prompt": 831, "completion": 5331, "total": 6162}}}
+{"method": "irt", "model": "deepseek-v3__cot", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "cot", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "ERNIE-Speed-128K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "gpt-5__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "gpt-5__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "gpt-5-mini__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "deepseek-v3__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "Spark Lite__hint", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "hint", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "gpt-4o-2024-11-20__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "ERNIE-Speed-8K__default", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "default", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "ERNIE-Speed-8K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "deepseek-v3__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"method": "irt", "model": "ERNIE-Tiny-8K__ps", "mapped_from": "qwen3.5-35b-a3b", "transport": "sdk_nonstream", "prompt_type": "ps", "extracted": "B", "is_correct": 1, "ground_truth": "B"}
+{"final_predictions": {"irt_prediction": 10.0, "fallback_irt": []}, "token_usage": {"irt": {"prompt": 3205, "completion": 38509, "total": 41714}, "reflection": {"prompt": 1600, "completion": 11118, "total": 12718}}}

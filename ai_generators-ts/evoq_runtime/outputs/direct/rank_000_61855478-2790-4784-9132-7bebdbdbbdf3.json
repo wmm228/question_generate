@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "61855478-2790-4784-9132-7bebdbdbbdf3",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "将一个底面水平放置的圆锥竖直立在桌面上，其主视图是（ ）",
+    "options": {
+      "A": "圆",
+      "B": "等腰三角形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "B",
+    "analysis": "[div]解：[/div][div]圆锥的主视图是指从正面观察圆锥所得到的平面图形．[/div][div]当圆锥底面水平放置时，从正面看，其轮廓为等腰三角形．[/div][div]故选：B．[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

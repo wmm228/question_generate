@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "e49bde94-545a-4e12-97b8-6f1a5a626ace",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "如图，一个圆锥竖直放置，它的主视图是（ ）",
+    "options": {
+      "A": "三角形",
+      "B": "圆形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "A",
+    "analysis": "|[div]解：根据三视图的定义，主视图是从物体正面观察所得到的投影。[/div][div]对于竖直放置的圆锥，其底面投影为一条线段，侧面轮廓投影为两条母线，[/div][div]因此组合起来的图形是一个等腰三角形。[/div][div]圆形是圆锥的俯视图，矩形是圆柱的主视图。[/div][div]故选：A．[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

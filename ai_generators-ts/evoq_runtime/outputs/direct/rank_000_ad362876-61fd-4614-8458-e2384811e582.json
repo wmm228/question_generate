@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "ad362876-61fd-4614-8458-e2384811e582",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个正方体放在桌面上，从正面、左面、上面观察，它的三视图分别都是(    )",
+    "options": {
+      "A": "正方形",
+      "B": "长方形",
+      "C": "三角形",
+      "D": "圆"
+    },
+    "answer": "A",
+    "analysis": "正方体的6个面都是完全相同的正方形。三视图是指从正面、左面、上面看到的平面图形。由于正方体无论从正面看、左面看还是上面看，看到的外轮廓都是一个正方形，所以它的三视图都应是正方形。\n\n逐项判断：\nA项，正方形，符合正方体的三视图特征，正确；\nB项，长方形，不符合，因为正方体各棱长相等，看到的轮廓不是一般长方形；\nC项，三角形，不符合正方体的外形特征；\nD项，圆，不符合正方体的外形特征。\n\n因此，正确答案选A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

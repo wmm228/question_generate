@@ -1,0 +1,52 @@
+{
+  "item": {
+    "id": "3faf70d0-1d8d-4655-aaab-07e7e494dba5",
+    "knowledge_id": "柱体体积",
+    "difficulty_target": 3,
+    "stem": "一个柱体的底面积为 \\(12\\text{cm}^2\\)，高为 \\(5\\text{cm}\\)，则该柱体的体积为（ ）",
+    "options": {
+      "A": "\\(60\\text{cm}^3\\)",
+      "B": "\\(17\\text{cm}^3\\)",
+      "C": "\\(36\\text{cm}^3\\)",
+      "D": "\\(20\\text{cm}^3\\)"
+    },
+    "answer": "A",
+    "analysis": "柱体体积公式为 \\(V=Sh\\)，其中 \\(S\\) 为底面积，\\(h\\) 为高。代入 \\(S=12, h=5\\)，得 \\(V=12\\times5=60\\)，故选 A。",
+    "meta": {
+      "source": "seed"
+    }
+  },
+  "reflection": {
+    "id": "3faf70d0-1d8d-4655-aaab-07e7e494dba5",
+    "rel_score": 0.95,
+    "solvable": 1,
+    "answer_consistent": 1,
+    "winner": "Tie",
+    "difficulty_cmp": "harder",
+    "actual_difficulty": 10.0,
+    "is_diff_match": false,
+    "algorithm_difficulty_irt": 10.0,
+    "difficulty_strict_match_irt": 0,
+    "difficulty_soft_match_irt": 1,
+    "passrate": 0,
+    "passrate_irt_strict": 0,
+    "passrate_irt_soft": 1,
+    "token_usage": {
+      "irt": {
+        "prompt": 3185,
+        "completion": 37340,
+        "total": 40525
+      },
+      "reflection": {
+        "prompt": 0,
+        "completion": 0,
+        "total": 0
+      }
+    },
+    "strength": "题干简洁，直接套用公式，计算过程无歧义。",
+    "weakness": "IRT 实测难度 10 严重超标，建议简化数值或增加提示以匹配目标难度。",
+    "advice": null
+  },
+  "generation": 1,
+  "rank": 0
+}

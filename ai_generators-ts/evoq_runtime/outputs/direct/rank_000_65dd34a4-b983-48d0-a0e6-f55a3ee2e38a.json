@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "65dd34a4-b983-48d0-a0e6-f55a3ee2e38a",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个底面水平放置的圆锥，其主视图是（   ）",
+    "options": {
+      "A": "圆",
+      "B": "等腰三角形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "B",
+    "analysis": "本题考查简单几何体的三视图。根据圆锥的几何特征，从正面观察底面水平放置的圆锥，其轮廓由两条母线和底面直径决定。|[div]根据三视图的投影规律，主视图反映物体的长和高。[/div][div]圆锥的主视图为一个等腰三角形，其中底边长等于圆锥底面直径，腰长等于圆锥的母线长。[/div][div]故选：B.[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

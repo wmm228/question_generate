@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "b865b876-c134-4a80-90af-6503a3a1dc90",
+    "knowledge_id": "由所看到的平面图形确定立体图形",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个几何体的俯视图是一个圆，则该几何体可能是（ ）",
+    "options": {
+      "A": "正方体",
+      "B": "长方体",
+      "C": "圆柱",
+      "D": "三棱柱"
+    },
+    "answer": "C",
+    "analysis": "解：根据常见几何体的三视图知识，圆柱的俯视图是一个圆，而正方体、长方体、三棱柱的俯视图均为多边形。因此，当俯视图为圆时，该几何体可能是圆柱。故选：C。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

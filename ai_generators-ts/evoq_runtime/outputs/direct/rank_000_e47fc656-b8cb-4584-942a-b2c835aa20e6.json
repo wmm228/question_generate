@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "e47fc656-b8cb-4584-942a-b2c835aa20e6",
+    "knowledge_id": "圆锥三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个直圆锥放在水平桌面上，底面与桌面重合，若从正上方看它的三视图中的俯视图，则看到的图形是(　　)",
+    "options": {
+      "A": "圆",
+      "B": "三角形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "A",
+    "analysis": "根据直圆锥的结构可知：它有一个圆形底面，顶点在底面圆心的正上方。\\n当直圆锥底面放在水平桌面上时，从正上方看过去，看到的是它的底面形状，因此俯视图是一个圆。\\n\\n逐项分析：\\nA. 圆——符合圆锥的俯视图；\\nB. 三角形——这是圆锥的正视图或侧视图常见的形状，不是俯视图；\\nC. 矩形——不是圆锥三视图中的图形；\\nD. 梯形——也不是该圆锥的俯视图。\\n\\n所以正确答案是A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

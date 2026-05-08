@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tutor AI 出题</title>
+<link rel="icon" type="image/webp" href="/static/logo-icon.webp">
+<link rel="stylesheet" href="/static/tutor-ai-ui.css">
+<script type="module" src="/static/generated/tutor-home.js"></script>
+</head>
+<body>
+<header class="app-header">
+  <img src="/static/header-logo.webp" class="logo-img" alt="Tutor">
+  <div class="divider"></div>
+  <span class="app-name">AI 出题工作台</span>
+  <div class="user-area">
+    <span class="user-name" id="user-name">未登录</span>
+    <button id="logout-button" class="logout-btn" type="button">退出</button>
+  </div>
+</header>
+
+<div id="login-mask">
+  <div class="login-header-logo">
+    <img src="/static/header-logo.webp" alt="Tutor">
+  </div>
+  <div class="login-center">
+    <div class="login-center-inner">
+      <div class="login-center-title">
+        <h1>Tutor AI 出题</h1>
+        <p>原版前端风格恢复。当前只保留 AI 出题相关入口与 OAH 运行状态联动。</p>
+        <div class="login-note-list">
+          <div class="login-note">
+            <strong>文本题 / 图片题</strong>
+            <span>统一走当前 Tutor 的 TypeScript AI 出题接口，不再拆成多套前端入口。</span>
+          </div>
+          <div class="login-note">
+            <strong>算法切换</strong>
+            <span>direct、cot、react、dear、eqpr、evoq 都从工作台内切换。</span>
+          </div>
+          <div class="login-note">
+            <strong>OAH 架构</strong>
+            <span>前端只做认证、参数编辑、规范预览、执行进度和结果展示。</span>
+          </div>
+        </div>
+      </div>
+      <div class="login-card">
+        <div class="login-card-title" id="login-subtitle">登录</div>
+        <div class="auth-tabs">
+          <button id="tab-login" class="auth-tab active" type="button">登录</button>
+          <button id="tab-register" class="auth-tab" type="button">注册</button>
+        </div>
+        <div class="auth-field">
+          <input id="auth-uid" type="text" placeholder="请输入用户名" autocomplete="username">
+        </div>
+        <div class="auth-field">
+          <input id="auth-pwd" type="password" placeholder="请输入密码（至少 6 位）" autocomplete="current-password">
+        </div>
+        <div id="auth-error"></div>
+        <button id="auth-submit" class="auth-submit" type="button"><span id="auth-btn-text">登 录</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="content">
+    <div class="view home-view" id="view-home">
+      <div class="home-welcome">
+        <h1>AI 出题工作台</h1>
+        <p>请选择你要进入的 AI 出题模式</p>
+      </div>
+
+      <div class="home-cards">
+        <button id="card-workbench" class="home-btn" type="button">
+          <img class="home-btn-icon" src="/static/shitiku-BykEoP7R.png" alt="AI 出题工作台">
+          <span class="home-btn-label">完整工作台</span>
+          <span class="home-btn-sub">进入参数、规范、进度、结果一体化页面</span>
+        </button>
+        <button id="card-text-question" class="home-btn" type="button">
+          <img class="home-btn-icon" src="/static/revision.svg" alt="文本题">
+          <span class="home-btn-label">文本题生成</span>
+          <span class="home-btn-sub">默认 direct + 文本选择题，先打通主链</span>
+        </button>
+        <button id="card-image-question" class="home-btn" type="button">
+          <img class="home-btn-icon" src="/static/cuotiben-fr-B4KMA.png" alt="图片题">
+          <span class="home-btn-label">图片题生成</span>
+          <span class="home-btn-sub">默认 evoq + 图片题，验证多模态出题</span>
+        </button>
+        <button id="card-runtime" class="home-btn" type="button">
+          <img class="home-btn-icon" src="/static/zhishixuexi-ByfCL3Da.png" alt="运行状态">
+          <span class="home-btn-label">运行状态</span>
+          <span class="home-btn-sub">查看当前服务、会话和 OAH 运行状态</span>
+        </button>
+      </div>
+
+      <section class="launch-panel">
+        <div class="launch-title-row">
+          <span class="launch-title">按知识点快速进入出题</span>
+          <span class="launch-hint">会自动带着知识点跳到工作台</span>
+        </div>
+        <div class="topbar-row" style="margin-top: 14px;">
+          <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b0b0c0" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+            <input id="launch-knowledge-point" type="text" placeholder="输入知识点，例如：一次函数图像性质">
+          </div>
+          <button id="launch-button" class="btn btn-primary" type="button">进入 AI 出题</button>
+        </div>
+        <div id="home-feedback" class="feedback" style="margin-top: 14px;">登录后会自动拉取 OAH 运行状态和算法配置。</div>
+      </section>
+
+      <div class="status-grid">
+        <section class="status-card">
+          <strong>服务状态</strong>
+          <div id="ping-summary" class="status-value mono">等待检查</div>
+        </section>
+        <section class="status-card">
+          <strong>当前会话</strong>
+          <div id="auth-summary" class="status-value">guest</div>
+        </section>
+        <section class="status-card">
+          <strong>OAH Runtime</strong>
+          <div id="oah-summary" class="status-value">登录后可查看</div>
+        </section>
+        <section class="status-card">
+          <strong>可用算法</strong>
+          <div id="algorithm-summary" class="status-value">等待加载</div>
+        </section>
+      </div>
+
+      <div class="home-actions">
+        <button id="refresh-status-button" class="btn btn-secondary" type="button">刷新状态</button>
+        <button id="open-contract-button" class="btn btn-secondary" type="button">查看 Contract</button>
+        <button id="open-oah-status-button" class="btn btn-secondary" type="button">查看 OAH 状态</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

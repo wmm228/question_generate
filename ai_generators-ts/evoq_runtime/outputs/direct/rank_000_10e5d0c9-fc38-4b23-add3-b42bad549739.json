@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "10e5d0c9-fc38-4b23-add3-b42bad549739",
+    "knowledge_id": "三视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "某几何体的三视图如下：主视图是矩形，左视图是矩形，俯视图是圆，则这个几何体是（   ）",
+    "options": {
+      "A": "圆柱",
+      "B": "圆锥",
+      "C": "球",
+      "D": "三棱柱"
+    },
+    "answer": "A",
+    "analysis": "解：根据常见几何体的三视图特征进行判断。\n圆柱在正放时：主视图是矩形，左视图也是矩形，俯视图是圆，完全符合题意。\n而圆锥的主视图一般是等腰三角形，俯视图是圆；球的三视图都是圆；三棱柱的俯视图一般不是圆。\n因此，满足“主视图是矩形，左视图是矩形，俯视图是圆”的几何体是圆柱。\n故选：A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

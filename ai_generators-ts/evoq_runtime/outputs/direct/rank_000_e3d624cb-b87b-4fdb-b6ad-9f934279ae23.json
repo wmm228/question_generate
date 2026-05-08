@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "e3d624cb-b87b-4fdb-b6ad-9f934279ae23",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个底面半径为3，高为4的圆锥，其主视图是（ ）",
+    "options": {
+      "A": "等腰三角形",
+      "B": "圆形",
+      "C": "矩形",
+      "D": "梯形"
+    },
+    "answer": "A",
+    "analysis": "圆锥的主视图是从正面观察圆锥所得到的投影。圆锥的底面为圆形，主视图会显示其底面直径和高度，因此主视图是一个等腰三角形，其中底边长度等于底面直径（6），两腰为圆锥的母线。选项B是俯视图形状，选项C和D不符合圆锥主视图特征，故选A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

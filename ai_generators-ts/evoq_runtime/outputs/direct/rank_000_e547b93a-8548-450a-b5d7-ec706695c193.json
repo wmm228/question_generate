@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "e547b93a-8548-450a-b5d7-ec706695c193",
+    "knowledge_id": "圆锥的主视图",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "已知圆锥的底面半径为3cm，高为4cm，则其主视图的面积为（ ）",
+    "options": {
+      "A": "12cm²",
+      "B": "24cm²",
+      "C": "6cm²",
+      "D": "8cm²"
+    },
+    "answer": "A",
+    "analysis": "圆锥的主视图是从正面观察得到的投影图形，其形状为等腰三角形。该三角形的底边长度等于圆锥底面的直径，即2×3=6cm；三角形的高等于圆锥的高，即4cm。根据三角形面积公式，主视图面积=1/2×底×高=1/2×6×4=12cm²。故选A。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

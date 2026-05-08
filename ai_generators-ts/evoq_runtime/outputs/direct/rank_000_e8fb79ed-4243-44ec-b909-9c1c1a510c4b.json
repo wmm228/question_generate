@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "e8fb79ed-4243-44ec-b909-9c1c1a510c4b",
+    "knowledge_id": "一元一次方程",
+    "difficulty_target": 2,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "解方程：3x-5=7，所得的x的值为（    ）",
+    "options": {
+      "A": "x=2",
+      "B": "x=3",
+      "C": "x=4",
+      "D": "x=5"
+    },
+    "answer": "C",
+    "analysis": "根据等式的性质解一元一次方程。\n\n由3x-5=7，\n两边同时加5，得3x=12；\n再两边同时除以3，得x=4。\n\n因此正确选项是C。",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}

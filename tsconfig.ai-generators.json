@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*.ts", "ai_generators-ts/**/*.ts"],
+  "exclude": ["src/frontend/**/*.ts"]
+}

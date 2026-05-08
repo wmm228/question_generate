@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "daf85598-3149-407d-b123-dd228b7d4ea3",
+    "knowledge_id": "由所看到的平面图形确定立体图形",
+    "difficulty_target": 3,
+    "question_type": "multiple_choice",
+    "content_mode": "text",
+    "image_placement": "",
+    "stem": "一个几何体的主视图和俯视图如图所示，其中主视图为长方形，俯视图为圆，则该几何体是\\(\\quad\\)",
+    "options": {
+      "A": "圆锥",
+      "B": "圆柱",
+      "C": "三棱柱",
+      "D": "球"
+    },
+    "answer": "B",
+    "analysis": "[div]解：根据几何体的三视图特征进行分析：[/div][div]1. 对于选项\\(A\\)圆锥，其主视图通常为三角形（或等腰三角形），俯视图为圆及圆心，与题意不符；[/div][div]2. 对于选项\\(B\\)圆柱，当其轴线垂直于水平面放置时，主视图为长方形，俯视图为圆，符合题意；[/div][div]3. 对于选项\\(C\\)三棱柱，其俯视图应为三角形，与题意不符；[/div][div]4. 对于选项\\(D\\)球，其主视图和俯视图均为圆，与题意不符。[/div][div]综上所述，该几何体应为圆柱。[/div][div]故选：\\(B\\)．[/div]",
+    "meta": {
+      "source": "baseline_direct"
+    }
+  },
+  "reflection": null,
+  "generation": 0,
+  "rank": 0
+}
