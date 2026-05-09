@@ -1,0 +1,16 @@
+node_modules/
+.npm-cache/
+dist/
+logs/
+output/
+
+.git/
+.env
+server.err.log
+server.out.log
+server.lock.json
+sessions.json
+
+resources/runtime-state/
+
+*.log

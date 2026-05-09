@@ -16,10 +16,10 @@ export interface TutorAuthFailureResult {
 export type TutorAuthResult = TutorAuthSuccessResult | TutorAuthFailureResult;
 
 export interface TutorAuthService {
-  login(uid: string, password: string): TutorAuthResult;
-  register(uid: string, password: string): TutorAuthResult;
-  logout(token: string | undefined): void;
-  getUidForToken(token: string | undefined): string | null;
+  login(uid: string, password: string): Promise<TutorAuthResult>;
+  register(uid: string, password: string): Promise<TutorAuthResult>;
+  logout(token: string | undefined): Promise<void>;
+  getUidForToken(token: string | undefined): Promise<string | null>;
 }
 
 export interface TutorAuthServiceDependencies {
@@ -65,16 +65,16 @@ function normalizeSessionRecord(value: unknown, sessionTtlMs: number): SessionRe
 }
 
 export function createTutorAuthService(deps: TutorAuthServiceDependencies): TutorAuthService {
-  function loadUsers(): UsersDB {
+  async function loadUsers(): Promise<UsersDB> {
     return deps.store.loadUsers();
   }
 
-  function saveUsers(users: UsersDB): void {
-    deps.store.saveUsers(users);
+  async function saveUsers(users: UsersDB): Promise<void> {
+    await deps.store.saveUsers(users);
   }
 
-  function loadSessions(): SessionsDB {
-    const raw = deps.store.loadSessions();
+  async function loadSessions(): Promise<SessionsDB> {
+    const raw = await deps.store.loadSessions();
     const sessions: SessionsDB = {};
     let changed = false;
     for (const [token, value] of Object.entries(raw)) {
@@ -89,36 +89,36 @@ export function createTutorAuthService(deps: TutorAuthServiceDependencies): Tuto
       }
     }
     if (changed) {
-      saveSessions(sessions);
+      await saveSessions(sessions);
     }
     return sessions;
   }
 
-  function saveSessions(sessions: SessionsDB): void {
-    deps.store.saveSessions(sessions);
+  async function saveSessions(sessions: SessionsDB): Promise<void> {
+    await deps.store.saveSessions(sessions);
   }
 
-  function createSession(uid: string): TutorAuthSuccessResult {
+  async function createSession(uid: string): Promise<TutorAuthSuccessResult> {
     const token = randomBytes(24).toString("hex");
-    const sessions = loadSessions();
+    const sessions = await loadSessions();
     sessions[token] = buildSessionRecord(uid, deps.sessionTtlMs);
-    saveSessions(sessions);
+    await saveSessions(sessions);
     return { ok: true, token, uid };
   }
 
   return {
-    login(uid: string, password: string): TutorAuthResult {
+    async login(uid: string, password: string): Promise<TutorAuthResult> {
       if (!uid || !password) {
         return { ok: false, status: 400, error: "uid and password are required" };
       }
-      const users = loadUsers();
+      const users = await loadUsers();
       const user = users[uid];
       if (!user || user.password_hash !== hashPassword(password)) {
         return { ok: false, status: 401, error: "invalid username or password" };
       }
       return createSession(uid);
     },
-    register(uid: string, password: string): TutorAuthResult {
+    async register(uid: string, password: string): Promise<TutorAuthResult> {
       if (!uid || !password) {
         return { ok: false, status: 400, error: "uid and password are required" };
       }
@@ -128,7 +128,7 @@ export function createTutorAuthService(deps: TutorAuthServiceDependencies): Tuto
       if (password.length < 6) {
         return { ok: false, status: 400, error: "password must be at least 6 characters" };
       }
-      const users = loadUsers();
+      const users = await loadUsers();
       if (users[uid]) {
         return { ok: false, status: 409, error: "uid already exists" };
       }
@@ -137,32 +137,32 @@ export function createTutorAuthService(deps: TutorAuthServiceDependencies): Tuto
         password_hash: hashPassword(password),
         created_at: new Date().toISOString(),
       };
-      saveUsers(users);
+      await saveUsers(users);
       return createSession(uid);
     },
-    logout(token: string | undefined): void {
+    async logout(token: string | undefined): Promise<void> {
       if (!token) {
         return;
       }
-      const sessions = loadSessions();
+      const sessions = await loadSessions();
       if (!sessions[token]) {
         return;
       }
       delete sessions[token];
-      saveSessions(sessions);
+      await saveSessions(sessions);
     },
-    getUidForToken(token: string | undefined): string | null {
+    async getUidForToken(token: string | undefined): Promise<string | null> {
       if (!token) {
         return null;
       }
-      const sessions = loadSessions();
+      const sessions = await loadSessions();
       const session = sessions[token];
       if (!session) {
         return null;
       }
       if (Date.parse(session.expiresAt) <= Date.now()) {
         delete sessions[token];
-        saveSessions(sessions);
+        await saveSessions(sessions);
         return null;
       }
       return session.uid;

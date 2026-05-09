@@ -69,7 +69,7 @@ export function createTutorFrontendRouter(deps: TutorFrontendRouterDependencies)
   });
 
   router.get("/", (_req: Request, res: Response) => {
-    sendLegacyFrontend(res);
+    sendHtmlFile(res, deps.questionAgentWorkbenchHtmlPath, "question agent workbench unavailable");
   });
 
   router.get("/legacy-tutor-ui", (_req: Request, res: Response) => {
@@ -77,7 +77,7 @@ export function createTutorFrontendRouter(deps: TutorFrontendRouterDependencies)
   });
 
   router.get("/home", (_req: Request, res: Response) => {
-    sendLegacyFrontend(res);
+    sendHtmlFile(res, deps.questionAgentWorkbenchHtmlPath, "question agent workbench unavailable");
   });
 
   router.get("/question-agent-workbench", (_req: Request, res: Response) => {

@@ -124,7 +124,7 @@ const PROGRESS_TEXT_MAP = {
     "AI question-generation service is currently unreachable.": "AI 出题服务当前不可达。",
     "AI question-generation worker is currently unavailable.": "AI 出题执行 Worker 当前不可用。",
     "AI question generation failed": "AI 出题失败",
-    "portrait not ready": "画像尚未准备完成。",
+    "portrait not ready": "规范尚未准备完成。",
 };
 export function translateProgressText(value) {
     const text = normalizeString(value);
@@ -231,8 +231,8 @@ const PENDING_FIELD_LABELS = {
     content_mode: "内容模式",
     algorithm: "算法",
     image_requirement: "图片要求",
-    teacher_profile: "教师画像",
-    student_profile: "学生画像",
+    teacher_profile: "教师偏好",
+    student_profile: "学生情况",
     none: "无",
 };
 export function renderPendingFieldLabel(value) {

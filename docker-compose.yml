@@ -1,0 +1,46 @@
+services:
+  tutor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tutor-app:latest
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      TUTOR_PORT: ${TUTOR_PORT:-7896}
+      TUTOR_STORAGE_BACKEND: ${TUTOR_STORAGE_BACKEND:-postgres}
+    ports:
+      - "${TUTOR_PORT:-7896}:7896"
+    volumes:
+      - tutor_runtime_state:/app/resources/runtime-state
+      - tutor_logs:/app/logs
+      - tutor_output:/app/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tutor}
+      POSTGRES_USER: ${POSTGRES_USER:-tutor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  tutor_runtime_state:
+  tutor_logs:
+  tutor_output:

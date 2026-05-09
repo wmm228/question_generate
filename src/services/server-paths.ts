@@ -22,17 +22,31 @@ export interface TutorServerPaths {
   stateDirectory: string;
 }
 
-export type TutorStorageBackend = "memory" | "filesystem";
+export interface TutorPostgresConfig {
+  connectionString: string | null;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  ssl: boolean;
+  schema: string;
+}
+
+export type TutorStorageBackend = "memory" | "filesystem" | "postgres";
 export type TutorStateBackend = TutorStorageBackend;
 
 export interface TutorServerEnvironment {
   port: number;
   sessionTtlMs: number;
   storageBackend: TutorStorageBackend;
+  postgres: TutorPostgresConfig;
 }
 
 const DEFAULT_PORT = 7896;
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_POSTGRES_PORT = 5432;
+const DEFAULT_POSTGRES_SCHEMA = "public";
 
 function uniqueResolvedPaths(paths: string[]): string[] {
   return [...new Set(paths.map((candidate) => path.resolve(candidate)))];
@@ -69,7 +83,47 @@ function normalizeSessionTtlMs(value: string | undefined): number {
 
 function normalizeStorageBackend(value: string | undefined): TutorStorageBackend {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "memory" ? "memory" : "filesystem";
+  if (normalized === "memory") {
+    return "memory";
+  }
+  if (normalized === "postgres") {
+    return "postgres";
+  }
+  return "filesystem";
+}
+
+function normalizeBoolean(value: string | undefined, fallback = false): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0" || normalized === "no") {
+    return false;
+  }
+  return fallback;
+}
+
+function normalizePostgresPort(value: string | undefined): number {
+  const parsed = Number.parseInt(value ?? String(DEFAULT_POSTGRES_PORT), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_POSTGRES_PORT;
+}
+
+function normalizePostgresSchema(value: string | undefined): string {
+  const normalized = (value || "").trim();
+  return normalized || DEFAULT_POSTGRES_SCHEMA;
+}
+
+function loadTutorPostgresConfig(): TutorPostgresConfig {
+  return {
+    connectionString: (process.env.DATABASE_URL || "").trim() || null,
+    host: (process.env.POSTGRES_HOST || process.env.PGHOST || "127.0.0.1").trim(),
+    port: normalizePostgresPort(process.env.POSTGRES_PORT || process.env.PGPORT),
+    database: (process.env.POSTGRES_DB || process.env.PGDATABASE || "tutor").trim(),
+    user: (process.env.POSTGRES_USER || process.env.PGUSER || "postgres").trim(),
+    password: process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || "",
+    ssl: normalizeBoolean(process.env.POSTGRES_SSL || process.env.PGSSL, false),
+    schema: normalizePostgresSchema(process.env.POSTGRES_SCHEMA),
+  };
 }
 
 function resolveFrontendAssetPath(
@@ -154,5 +208,6 @@ export function loadTutorServerEnvironment(envPath: string): TutorServerEnvironm
     port: normalizePort(process.env.TUTOR_PORT),
     sessionTtlMs: normalizeSessionTtlMs(process.env.SESSION_TTL_MS),
     storageBackend: normalizeStorageBackend(process.env.TUTOR_STORAGE_BACKEND ?? process.env.TUTOR_STATE_BACKEND),
+    postgres: loadTutorPostgresConfig(),
   };
 }

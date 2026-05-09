@@ -121,10 +121,7 @@ export class WorkbenchApi {
     requestId = "",
   ): Promise<T> {
     const headers = new Headers(init.headers ?? {});
-    if (includeSession) {
-      if (!this.sessionToken) {
-        throw new Error("当前没有可用的会话令牌，请重新登录。");
-      }
+    if (includeSession && this.sessionToken) {
       headers.set("x-session-token", this.sessionToken);
     }
     if (requestId) {

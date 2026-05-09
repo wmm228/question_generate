@@ -57,6 +57,22 @@ function normalizeStatusString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isGenerateIntentMessage(value: string): boolean {
+  const text = normalizeStatusString(value).replace(/\s+/g, "");
+  if (!text) {
+    return false;
+  }
+  return /^(出呀|出题|出题呀|生成|开始生成|快生成|可以生成|马上生成|开始出题|生成吧|出吧|来题|开始吧)[。！!？?呀啊]*$/.test(text);
+}
+
+function isPortraitReadyForGeneration(portrait: unknown): boolean {
+  if (!isRecord(portrait)) {
+    return false;
+  }
+  const spec = isRecord(portrait.spec) ? portrait.spec : {};
+  return normalizeStatusString(portrait.status) === "ready" && normalizeStatusString(spec.status) === "ready";
+}
+
 function readRequiredUid(req: Request, res: Response, deps: QuestionAgentRouterDependencies): string | null {
   const uid = deps.getUidFromReq(req);
   if (!uid) {
@@ -284,7 +300,7 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
       const body = readRequestBody(req);
       const teacherMessage = normalizeStatusString(body.message);
       const turn = await createQuestionPortrait(ownerUid, teacherMessage);
-      const saved = deps.portraitStore.save(turn.portrait);
+      const saved = await deps.portraitStore.save(turn.portrait);
 
       logEvent("info", req, "question_agent.portrait.started", {
         portrait_id: saved.portrait_id,
@@ -304,22 +320,22 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
       });
 
       res.status(500).json({
-        error: "画像对话启动失败",
+        error: "规范对话启动失败",
         details: error instanceof Error ? error.message : String(error),
       });
     }
   });
 
-  router.get("/portrait/:portraitId", deps.requireAuth, (req: Request, res: Response) => {
+  router.get("/portrait/:portraitId", deps.requireAuth, async (req: Request, res: Response) => {
     const ownerUid = readRequiredUid(req, res, deps);
     if (!ownerUid) {
       return;
     }
 
     const portraitId = normalizeStatusString(req.params.portraitId);
-    const portrait = deps.portraitStore.load(ownerUid, portraitId);
+    const portrait = await deps.portraitStore.load(ownerUid, portraitId);
     if (!portrait) {
-      res.status(404).json({ error: "画像不存在" });
+      res.status(404).json({ error: "规范会话不存在" });
       return;
     }
 
@@ -331,13 +347,13 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
     res.json({ portrait });
   });
 
-  router.get("/portraits", deps.requireAuth, (req: Request, res: Response) => {
+  router.get("/portraits", deps.requireAuth, async (req: Request, res: Response) => {
     const ownerUid = readRequiredUid(req, res, deps);
     if (!ownerUid) {
       return;
     }
 
-    const portraits = deps.portraitStore.list(ownerUid);
+    const portraits = await deps.portraitStore.list(ownerUid);
     logEvent("info", req, "question_agent.portrait.listed", {
       owner_uid: ownerUid,
       portrait_count: portraits.length,
@@ -353,9 +369,9 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
     }
 
     const portraitId = normalizeStatusString(req.params.portraitId);
-    const portrait = deps.portraitStore.load(ownerUid, portraitId);
+    const portrait = await deps.portraitStore.load(ownerUid, portraitId);
     if (!portrait) {
-      res.status(404).json({ error: "画像不存在" });
+      res.status(404).json({ error: "规范会话不存在" });
       return;
     }
 
@@ -366,9 +382,23 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
       return;
     }
 
+    if (isGenerateIntentMessage(teacherMessage) && isPortraitReadyForGeneration(portrait)) {
+      logEvent("warn", req, "question_agent.portrait.generate_intent_rejected", {
+        portrait_id: portrait.portrait_id,
+        owner_uid: ownerUid,
+      });
+      res.status(409).json({
+        error: "规范已就绪，请调用生成接口，不要继续走画像对话接口。",
+        code: "PORTRAIT_READY_GENERATE_REQUESTED",
+        hint: "前端应调用 /api/ai-question/generate，并使用当前画像 draft 作为生成参数。",
+        portrait,
+      });
+      return;
+    }
+
     try {
       const turn = await applyQuestionPortraitTeacherReply(portrait, teacherMessage);
-      const saved = deps.portraitStore.save(turn.portrait);
+      const saved = await deps.portraitStore.save(turn.portrait);
 
       logEvent("info", req, "question_agent.portrait.updated", {
         portrait_id: saved.portrait_id,
@@ -389,7 +419,7 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
       });
 
       res.status(500).json({
-        error: "画像对话回复失败",
+        error: "规范对话回复失败",
         details: error instanceof Error ? error.message : String(error),
       });
     }

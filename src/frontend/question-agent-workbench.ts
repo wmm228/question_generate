@@ -1,5 +1,6 @@
-import type {
+﻿import type {
   FeedbackTone,
+  GeneratedResult,
   PortraitDocumentEnvelope,
   PortraitListItem,
 } from "./question-agent-workbench-types";
@@ -102,6 +103,13 @@ class QuestionAgentWorkbenchApp {
   private readonly toggleInspectorButton = requireElement<HTMLButtonElement>("toggle-inspector-button");
 
   private sessionSearchQuery = "";
+  private portraitReplyCompositionActive = false;
+  private sendingPortraitReply = false;
+  private localTeacherNotice = "";
+  private pendingTeacherMessage = "";
+  private waitingForAssistant = false;
+  private localAssistantNotice = "";
+  private localAssistantNoticeTone: "neutral" | "error" = "neutral";
 
   async init(): Promise<void> {
     this.bindEvents();
@@ -134,6 +142,21 @@ class QuestionAgentWorkbenchApp {
     this.portraitReplyInput.addEventListener("input", () => {
       this.store.setPortraitReplyDraft(this.portraitReplyInput.value);
       autoResizeTextarea(this.portraitReplyInput);
+    });
+    this.portraitReplyInput.addEventListener("keydown", (event) => {
+      if (!this.shouldSubmitOnEnter(event, this.portraitReplyCompositionActive)) {
+        return;
+      }
+      event.preventDefault();
+      void this.handleSendPortraitReply();
+    });
+    this.portraitReplyInput.addEventListener("compositionstart", () => {
+      this.portraitReplyCompositionActive = true;
+    });
+    this.portraitReplyInput.addEventListener("compositionend", () => {
+      window.setTimeout(() => {
+        this.portraitReplyCompositionActive = false;
+      }, 0);
     });
 
     this.portraitStartButton.addEventListener("click", () => void this.handleStartPortrait());
@@ -323,38 +346,38 @@ class QuestionAgentWorkbenchApp {
   private renderPortraitState(): void {
     const portrait = this.store.state.portraitDocument;
     const messages = Array.isArray(portrait?.messages) ? portrait.messages || [] : [];
+    const hasVisibleConversation = Boolean(portrait) || this.waitingForAssistant || Boolean(this.pendingTeacherMessage);
+    document.body.classList.toggle("has-portrait", hasVisibleConversation);
+    this.portraitReplyInput.placeholder = hasVisibleConversation
+      ? "继续补充老师要求，例如：难度先定 3，题型用简答题，暂时不要图片。"
+      : "输入出题需求，按 Enter 开始对话。";
     if (!portrait) {
-      document.body.classList.remove("has-portrait");
       this.portraitSource.textContent = "portrait: -";
       this.portraitBadges.innerHTML = '<span class="badge">等待开始</span>';
-      this.portraitChat.innerHTML = `
-        <div class="dialogue-card dialogue-assistant">
-          <div class="dialogue-role">assistant</div>
-          <div class="dialogue-text">点击“新建画像会话”，主智能体会先确认试题画像需要哪些字段。</div>
-        </div>
-      `;
+      this.portraitChat.innerHTML = this.renderPendingDialogueMarkup();
+      this.portraitChat.scrollTop = this.portraitChat.scrollHeight;
       this.portraitMarkdown.textContent = "暂无画像文档。";
       this.renderPortraitGuidance(null);
       return;
     }
 
-    document.body.classList.add("has-portrait");
     this.portraitSource.textContent = `portrait: ${normalizeString(portrait.portrait_id)}${portrait.markdown_path ? ` | ${normalizeString(portrait.markdown_path)}` : ""}`;
     this.portraitBadges.innerHTML = [
       this.renderBadge(normalizeString(portrait.status) || "draft", normalizeString(portrait.status) === "ready" ? "ok" : "warn"),
       this.renderBadge(renderPendingFieldLabel(normalizeString(portrait.pending_field)), "neutral"),
     ].join("");
 
-    this.portraitChat.innerHTML = messages.map((message) => {
+    const messageMarkup = messages.map((message) => {
       const role = normalizeString(message.role) || "assistant";
       const cls = role === "teacher" ? "dialogue-teacher" : "dialogue-assistant";
       return `
         <div class="dialogue-card ${cls}">
           <div class="dialogue-role">${escapeHtml(role)}</div>
-          <div class="dialogue-text">${renderMathText(normalizeString(message.content))}</div>
+          <div class="dialogue-text">${renderMathText(this.getDialogueDisplayText(message.content))}</div>
         </div>
       `;
-    }).join("") || `
+    }).join("");
+    this.portraitChat.innerHTML = `${messageMarkup}${this.renderLocalTeacherNoticeMarkup()}${this.renderGeneratedDialogueMarkup()}${this.renderLocalAssistantNoticeMarkup()}${this.renderPendingDialogueMarkup()}` || `
       <div class="dialogue-card dialogue-assistant">
         <div class="dialogue-role">assistant</div>
         <div class="dialogue-text">画像会话已创建，等待主智能体回复。</div>
@@ -395,6 +418,128 @@ class QuestionAgentWorkbenchApp {
       : '<div class="insight-empty">暂无已确认项。</div>';
 
     this.portraitNextStep.textContent = nextStep || "下一步：继续和主智能体对话。";
+  }
+
+  private renderPendingDialogueMarkup(): string {
+    return [
+      this.pendingTeacherMessage
+        ? `
+          <div class="dialogue-card dialogue-teacher dialogue-pending">
+            <div class="dialogue-role">teacher</div>
+            <div class="dialogue-text">${renderMathText(this.pendingTeacherMessage)}</div>
+          </div>
+        `
+        : "",
+      this.waitingForAssistant
+        ? `
+          <div class="dialogue-card dialogue-assistant dialogue-thinking">
+            <div class="dialogue-role">assistant</div>
+            <div class="dialogue-text">AI 正在思考中<span class="thinking-dots">...</span></div>
+          </div>
+        `
+        : "",
+    ].join("");
+  }
+
+  private renderLocalTeacherNoticeMarkup(): string {
+    if (!this.localTeacherNotice) {
+      return "";
+    }
+    return `
+      <div class="dialogue-card dialogue-teacher">
+        <div class="dialogue-role">teacher</div>
+        <div class="dialogue-text">${renderMathText(this.localTeacherNotice)}</div>
+      </div>
+    `;
+  }
+
+  private getDialogueDisplayText(content: unknown): string {
+    const raw = normalizeString(content);
+    if (!raw) {
+      return "";
+    }
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const jsonText = normalizeString(fenced?.[1] || raw);
+    if (!jsonText.startsWith("{") || !jsonText.endsWith("}")) {
+      return raw;
+    }
+    try {
+      const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+      const assistantMessage = normalizeString(parsed.assistant_message);
+      return assistantMessage || raw;
+    } catch {
+      const match = jsonText.match(/"assistant_message"\s*:\s*"([\s\S]*?)"\s*,\s*"extracted_fields"\s*:/);
+      return normalizeString(match?.[1]) || raw;
+    }
+  }
+
+  private renderGeneratedDialogueMarkup(): string {
+    const result = this.store.state.generatedResult;
+    if (!result) {
+      return "";
+    }
+    return `
+      <div class="dialogue-card dialogue-assistant dialogue-result">
+        <div class="dialogue-role">assistant</div>
+        <div class="dialogue-text">${this.renderGeneratedQuestionCard(result)}</div>
+      </div>
+    `;
+  }
+
+  private renderLocalAssistantNoticeMarkup(): string {
+    if (!this.localAssistantNotice) {
+      return "";
+    }
+    const cls = this.localAssistantNoticeTone === "error" ? "dialogue-error" : "";
+    return `
+      <div class="dialogue-card dialogue-assistant ${cls}">
+        <div class="dialogue-role">assistant</div>
+        <div class="dialogue-text">${renderMathText(this.localAssistantNotice)}</div>
+      </div>
+    `;
+  }
+
+  private renderGeneratedQuestionCard(result: GeneratedResult): string {
+    const stemImage = resolveStemImageSrc(result);
+    const explanationImage = resolveExplanationImageSrc(result);
+    const optionImageMap = resolveOptionImageMap(result);
+    const optionMarkup = result.options.length > 0
+      ? `<ol class="result-options">${result.options.map((option, index) => {
+        const optionKey = String.fromCharCode(65 + index);
+        const imageSrc = optionImageMap.get(optionKey);
+        return `<li>${renderMathText(option)}${imageSrc ? `<div class="option-image"><img src="${escapeHtml(imageSrc)}" alt="option-${optionKey}"></div>` : ""}</li>`;
+      }).join("")}</ol>`
+      : "<div>暂无选项</div>";
+    const stepsMarkup = result.solution_steps.length > 0
+      ? `<ol class="result-steps">${result.solution_steps.map((step) => `<li>${renderMathText(step)}</li>`).join("")}</ol>`
+      : "<div>暂无解析</div>";
+    const assetsMarkup = [stemImage, explanationImage, ...optionImageMap.values()].some(Boolean)
+      ? `
+        <div class="asset-grid">
+          ${stemImage ? `<div class="asset-card"><strong>题干配图</strong><img src="${escapeHtml(stemImage)}" alt="stem-image"></div>` : ""}
+          ${explanationImage ? `<div class="asset-card"><strong>解析配图</strong><img src="${escapeHtml(explanationImage)}" alt="solution-image"></div>` : ""}
+        </div>
+      `
+      : "";
+    return `
+      <div class="result-card">
+        <h3>题干</h3>
+        <div class="math-block">${renderMathText(result.question)}</div>
+      </div>
+      <div class="result-card">
+        <h3>选项</h3>
+        ${optionMarkup}
+      </div>
+      <div class="result-card">
+        <h3>解析</h3>
+        ${stepsMarkup}
+      </div>
+      <div class="result-card">
+        <h3>正确答案</h3>
+        <div>${renderMathText(result.ground_truth)}</div>
+      </div>
+      ${assetsMarkup}
+    `;
   }
 
   private renderFormFromDraft(): void {
@@ -504,50 +649,7 @@ class QuestionAgentWorkbenchApp {
       this.resultView.innerHTML = '<div class="result-card">暂无结果。生成成功后，这里会显示题干、选项、解析和图片资产。</div>';
       return;
     }
-
-    const stemImage = resolveStemImageSrc(result);
-    const explanationImage = resolveExplanationImageSrc(result);
-    const optionImageMap = resolveOptionImageMap(result);
-
-    const optionMarkup = result.options.length > 0
-      ? `<ol class="result-options">${result.options.map((option, index) => {
-        const optionKey = String.fromCharCode(65 + index);
-        const imageSrc = optionImageMap.get(optionKey);
-        return `<li>${renderMathText(option)}${imageSrc ? `<div class="option-image"><img src="${escapeHtml(imageSrc)}" alt="option-${optionKey}"></div>` : ""}</li>`;
-      }).join("")}</ol>`
-      : "<div>暂无选项</div>";
-    const stepsMarkup = result.solution_steps.length > 0
-      ? `<ol class="result-steps">${result.solution_steps.map((step) => `<li>${renderMathText(step)}</li>`).join("")}</ol>`
-      : "<div>暂无解析</div>";
-
-    const assetsMarkup = [stemImage, explanationImage, ...optionImageMap.values()].some(Boolean)
-      ? `
-        <div class="asset-grid">
-          ${stemImage ? `<div class="asset-card"><strong>题干配图</strong><img src="${escapeHtml(stemImage)}" alt="stem-image"></div>` : ""}
-          ${explanationImage ? `<div class="asset-card"><strong>解析配图</strong><img src="${escapeHtml(explanationImage)}" alt="solution-image"></div>` : ""}
-        </div>
-      `
-      : "";
-
-    this.resultView.innerHTML = `
-      <div class="result-card">
-        <h3>题干</h3>
-        <div class="math-block">${renderMathText(result.question)}</div>
-      </div>
-      <div class="result-card">
-        <h3>选项</h3>
-        ${optionMarkup}
-      </div>
-      <div class="result-card">
-        <h3>解析</h3>
-        ${stepsMarkup}
-      </div>
-      <div class="result-card">
-        <h3>正确答案</h3>
-        <div>${renderMathText(result.ground_truth)}</div>
-      </div>
-      ${assetsMarkup}
-    `;
+    this.resultView.innerHTML = this.renderGeneratedQuestionCard(result);
     void this.typesetMath(this.resultView);
   }
 
@@ -565,8 +667,8 @@ class QuestionAgentWorkbenchApp {
     this.sessionOpenLatestButton.disabled = !authenticated || busy || this.store.state.portraitList.length === 0;
     this.sessionSyncButton.disabled = !authenticated || busy || !this.store.state.portraitDocument;
     this.sessionNewButton.disabled = !authenticated || busy;
-    this.portraitSendButton.disabled = !authenticated || busy || !this.store.state.portraitDocument;
-    this.portraitReplyInput.disabled = !authenticated || busy || !this.store.state.portraitDocument;
+    this.portraitSendButton.disabled = !authenticated || busy;
+    this.portraitReplyInput.disabled = !authenticated || busy;
     this.portraitSyncButton.disabled = !authenticated || busy || !this.store.state.portraitDocument;
 
     [
@@ -723,6 +825,7 @@ class QuestionAgentWorkbenchApp {
     if (!portraitId) {
       return;
     }
+    this.clearLocalDialogueNotices();
     this.store.setBusy(true);
     try {
       await this.store.loadPortrait(portraitId);
@@ -752,13 +855,22 @@ class QuestionAgentWorkbenchApp {
     await this.handleOpenPortrait(latestPortraitId);
   }
 
-  private async handleStartPortrait(): Promise<void> {
+  private async handleStartPortrait(initialMessage = ""): Promise<void> {
     if (!this.isAuthenticated()) {
       this.showLogin();
       this.setFeedback(this.portraitFeedback, "请先登录，再开始画像对话。", "warn");
       return;
     }
-    const message = this.knowledgePointInput.value.trim();
+    const message = initialMessage.trim();
+    if (!message) {
+      this.endAssistantWait();
+      this.clearLocalDialogueNotices();
+      this.store.startNewPortraitDraft();
+      this.setFeedback(this.portraitFeedback, "已新建空白对话，请输入需求后按 Enter。", "neutral");
+      window.setTimeout(() => this.portraitReplyInput.focus(), 0);
+      return;
+    }
+    this.beginAssistantWait(message);
     this.store.setBusy(true);
     this.setFeedback(this.portraitFeedback, "正在创建画像文档。", "neutral");
     try {
@@ -767,6 +879,7 @@ class QuestionAgentWorkbenchApp {
     } catch (error) {
       this.setFeedback(this.portraitFeedback, error instanceof Error ? error.message : "画像启动失败", "error");
     } finally {
+      this.endAssistantWait();
       this.store.setBusy(false);
     }
   }
@@ -777,21 +890,126 @@ class QuestionAgentWorkbenchApp {
       this.setFeedback(this.portraitFeedback, "请先登录，再发送回复。", "warn");
       return;
     }
+    if (this.sendingPortraitReply || this.store.state.busy) {
+      return;
+    }
     const message = this.portraitReplyInput.value.trim();
     if (!message) {
       this.setFeedback(this.portraitFeedback, "请输入老师回复。", "warn");
       return;
     }
-    this.store.setBusy(true);
-    this.setFeedback(this.portraitFeedback, "正在更新画像文档。", "neutral");
+    this.sendingPortraitReply = true;
     try {
-      await this.store.sendPortraitReply(message);
-      const portraitReady = normalizeString(this.store.state.portraitDocument?.status) === "ready";
-      this.setFeedback(this.portraitFeedback, portraitReady ? "画像已补齐，可以开始出题。" : "画像已更新。", "ok");
-    } catch (error) {
-      this.setFeedback(this.portraitFeedback, error instanceof Error ? error.message : "画像更新失败", "error");
+      if (!this.store.state.portraitDocument) {
+        await this.handleStartPortrait(message);
+        return;
+      }
+      this.beginAssistantWait(message);
+      if (this.shouldGenerateFromTeacherMessage(message)) {
+        await this.handleGenerateFromChat();
+        return;
+      }
+      this.localTeacherNotice = "";
+      this.store.setBusy(true);
+      this.setFeedback(this.portraitFeedback, "正在更新画像文档。", "neutral");
+      try {
+        await this.store.sendPortraitReply(message);
+        const portraitReady = normalizeString(this.store.state.portraitDocument?.status) === "ready";
+        this.setFeedback(this.portraitFeedback, portraitReady ? "画像已补齐，可以开始出题。" : "画像已更新。", "ok");
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : "画像更新失败";
+        this.localAssistantNotice = messageText;
+        this.localAssistantNoticeTone = "error";
+        this.setFeedback(this.portraitFeedback, messageText, "error");
+      } finally {
+        this.endAssistantWait();
+        this.store.setBusy(false);
+      }
     } finally {
+      this.sendingPortraitReply = false;
+    }
+  }
+
+  private beginAssistantWait(message: string): void {
+    this.pendingTeacherMessage = message;
+    this.waitingForAssistant = true;
+    this.localTeacherNotice = "";
+    this.localAssistantNotice = "";
+    this.localAssistantNoticeTone = "neutral";
+    this.portraitReplyInput.value = "";
+    this.store.setPortraitReplyDraft("");
+    autoResizeTextarea(this.portraitReplyInput);
+    this.renderPortraitState();
+  }
+
+  private endAssistantWait(clearTeacherMessage = true): void {
+    if (clearTeacherMessage) {
+      this.pendingTeacherMessage = "";
+    }
+    this.waitingForAssistant = false;
+  }
+
+  private clearLocalDialogueNotices(): void {
+    this.localTeacherNotice = "";
+    this.localAssistantNotice = "";
+    this.localAssistantNoticeTone = "neutral";
+  }
+
+  private shouldGenerateFromTeacherMessage(message: string): boolean {
+    const text = normalizeString(message).replace(/\s+/g, "");
+    if (!text) {
+      return false;
+    }
+    const readyState = getPortraitReadyState(this.store.state.portraitDocument);
+    if (!readyState.portraitReady || !readyState.specReady) {
+      return false;
+    }
+    return /^(出呀|出题|出题呀|生成|开始生成|快生成|可以生成|马上生成|开始出题|生成吧|出吧|来题|开始吧)[。！!？?呀啊]*$/.test(text);
+  }
+
+  private shouldSubmitOnEnter(event: KeyboardEvent, compositionActive: boolean): boolean {
+    return (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !compositionActive &&
+      !event.isComposing &&
+      event.keyCode !== 229
+    );
+  }
+
+  private async handleGenerateFromChat(): Promise<void> {
+    const teacherMessage = this.pendingTeacherMessage;
+    if (this.store.state.portraitDocument) {
+      this.store.syncPortraitToDraft();
+    } else {
+      this.syncFormToDraft();
+    }
+    const payload = this.store.buildPayload();
+    if (!payload.knowledge_point) {
+      this.localTeacherNotice = teacherMessage;
+      this.localAssistantNotice = "请先填写知识点。";
+      this.localAssistantNoticeTone = "error";
+      this.setFeedback(this.generateFeedback, "请先填写知识点。", "warn");
+      this.endAssistantWait();
+      this.renderPortraitState();
+      return;
+    }
+    this.store.setBusy(true);
+    this.setFeedback(this.generateFeedback, "正在生成题目。", "neutral");
+    try {
+      await this.store.generateQuestion();
+      this.localAssistantNotice = "";
+      this.setFeedback(this.generateFeedback, "题目生成完成。", "ok");
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : "题目生成失败";
+      this.localAssistantNotice = messageText;
+      this.localAssistantNoticeTone = "error";
+      this.setFeedback(this.generateFeedback, messageText, "error");
+    } finally {
+      this.localTeacherNotice = teacherMessage;
+      this.endAssistantWait();
       this.store.setBusy(false);
+      this.renderPortraitState();
     }
   }
 

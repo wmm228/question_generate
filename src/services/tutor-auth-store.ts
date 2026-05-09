@@ -18,10 +18,10 @@ export interface SessionRecord {
 export type SessionsDB = Record<string, SessionRecord>;
 
 export interface TutorAuthStore {
-  loadUsers(): UsersDB;
-  saveUsers(users: UsersDB): void;
-  loadSessions(): Record<string, unknown>;
-  saveSessions(sessions: SessionsDB): void;
+  loadUsers(): Promise<UsersDB>;
+  saveUsers(users: UsersDB): Promise<void>;
+  loadSessions(): Promise<Record<string, unknown>>;
+  saveSessions(sessions: SessionsDB): Promise<void>;
 }
 
 export interface JsonFileTutorAuthStoreDependencies {
@@ -63,16 +63,16 @@ export function createJsonFileTutorAuthStore(
   deps: JsonFileTutorAuthStoreDependencies,
 ): TutorAuthStore {
   return {
-    loadUsers(): UsersDB {
+    async loadUsers(): Promise<UsersDB> {
       return readJsonFile<UsersDB>(deps.usersPath, {});
     },
-    saveUsers(users: UsersDB): void {
+    async saveUsers(users: UsersDB): Promise<void> {
       writeJsonFile(deps.usersPath, users);
     },
-    loadSessions(): Record<string, unknown> {
+    async loadSessions(): Promise<Record<string, unknown>> {
       return readJsonFile<Record<string, unknown>>(deps.sessionsPath, {});
     },
-    saveSessions(sessions: SessionsDB): void {
+    async saveSessions(sessions: SessionsDB): Promise<void> {
       writeJsonFile(deps.sessionsPath, sessions);
     },
   };
@@ -85,16 +85,16 @@ export function createInMemoryTutorAuthStore(
   let sessions = cloneSessions(options.sessions ?? {});
 
   return {
-    loadUsers(): UsersDB {
+    async loadUsers(): Promise<UsersDB> {
       return cloneUsers(users);
     },
-    saveUsers(nextUsers: UsersDB): void {
+    async saveUsers(nextUsers: UsersDB): Promise<void> {
       users = cloneUsers(nextUsers);
     },
-    loadSessions(): Record<string, unknown> {
+    async loadSessions(): Promise<Record<string, unknown>> {
       return cloneSessions(sessions);
     },
-    saveSessions(nextSessions: SessionsDB): void {
+    async saveSessions(nextSessions: SessionsDB): Promise<void> {
       sessions = cloneSessions(nextSessions);
     },
   };

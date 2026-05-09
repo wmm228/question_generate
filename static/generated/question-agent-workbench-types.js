@@ -57,8 +57,9 @@ export const DEFAULT_PERSISTED_STATE = {
         image_targets: [],
     },
     layout: {
-        sidebarWidth: 280,
-        chatPanelWidth: 1.5,
+        sidebarWidth: 240,
+        chatPanelWidth: 3.4,
+        inspectorWidth: 300,
         sidebarCollapsed: false,
         inspectorCollapsed: false,
     },

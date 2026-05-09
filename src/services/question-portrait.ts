@@ -582,6 +582,7 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     "",
     "Rules:",
     "- assistant_message must be teacher-facing Chinese, concise, and conversational.",
+    "- assistant_message must not contain unescaped double quotes; use Chinese quotation marks like “二次函数” for examples.",
     "- portrait_state.missing_items must be teacher-facing Chinese, not internal codes.",
     "- If a field is not explicitly confirmed by the teacher, keep it empty in extracted_fields.",
     "- Only set status to ready when the portrait can directly enter generation.",
@@ -623,14 +624,9 @@ function extractJsonObject(text: string): string {
 function parseRemotePortraitReply(
   text: string,
 ): { assistantMessage: string; extractedFields: unknown; portraitState: unknown } {
+  let jsonObject = "";
   try {
-    const parsed = JSON.parse(extractJsonObject(text)) as RemotePortraitReply;
-    const assistantMessage = normalizeString(parsed.assistant_message) || text.trim();
-    return {
-      assistantMessage,
-      extractedFields: parsed.extracted_fields,
-      portraitState: parsed.portrait_state,
-    };
+    jsonObject = extractJsonObject(text);
   } catch {
     return {
       assistantMessage: text.trim(),
@@ -638,6 +634,54 @@ function parseRemotePortraitReply(
       portraitState: {},
     };
   }
+  try {
+    const parsed = JSON.parse(jsonObject) as RemotePortraitReply;
+    const assistantMessage = normalizeString(parsed.assistant_message) || text.trim();
+    return {
+      assistantMessage,
+      extractedFields: parsed.extracted_fields,
+      portraitState: parsed.portrait_state,
+    };
+  } catch {
+    const repaired = repairAssistantMessageJson(jsonObject);
+    if (repaired) {
+      try {
+        const parsed = JSON.parse(repaired) as RemotePortraitReply;
+        const assistantMessage = normalizeString(parsed.assistant_message) || extractAssistantMessage(text) || text.trim();
+        return {
+          assistantMessage,
+          extractedFields: parsed.extracted_fields,
+          portraitState: parsed.portrait_state,
+        };
+      } catch {
+        // Fall through to the text-only recovery below.
+      }
+    }
+    return {
+      assistantMessage: extractAssistantMessage(text) || text.trim(),
+      extractedFields: {},
+      portraitState: {},
+    };
+  }
+}
+
+function extractAssistantMessage(text: string): string {
+  let jsonObject = "";
+  try {
+    jsonObject = extractJsonObject(text);
+  } catch {
+    return "";
+  }
+  const match = jsonObject.match(/"assistant_message"\s*:\s*"([\s\S]*?)"\s*,\s*"extracted_fields"\s*:/);
+  return normalizeString(match?.[1]);
+}
+
+function repairAssistantMessageJson(text: string): string | null {
+  const match = text.match(/("assistant_message"\s*:\s*")([\s\S]*?)("\s*,\s*"extracted_fields"\s*:)/);
+  if (!match) {
+    return null;
+  }
+  return `${text.slice(0, match.index)}"assistant_message": ${JSON.stringify(match[2])}, "extracted_fields":${text.slice((match.index || 0) + match[0].length)}`;
 }
 
 function createDerivedPortrait(

@@ -1,7 +1,7 @@
 import { DEFAULT_CLIENT_CONFIG } from "./question-agent-workbench-types.js";
 import { IMAGE_TARGET_BY_PLACEMENT } from "./question-agent-workbench-types.js";
 import { WorkbenchApi } from "./question-agent-workbench-api.js";
-import { clearSessionToken, loadGuestAuth, loadSessionToken, loadWorkbenchState, saveGuestAuth, saveSessionToken, saveWorkbenchState, } from "./question-agent-workbench-storage.js";
+import { loadGuestAuth, loadWorkbenchState, saveGuestAuth, saveWorkbenchState, } from "./question-agent-workbench-storage.js";
 import { createRequestId, getPortraitReadyState, normalizePortraitList, normalizeString, readSpecResponseFromError } from "./question-agent-workbench-utils.js";
 export class WorkbenchSessionStore {
     api = new WorkbenchApi();
@@ -9,7 +9,7 @@ export class WorkbenchSessionStore {
     progressTimerId = null;
     state = {
         authUid: "",
-        sessionToken: loadSessionToken(),
+        sessionToken: "",
         currentUser: "",
         busy: false,
         clientConfig: DEFAULT_CLIENT_CONFIG,
@@ -26,7 +26,7 @@ export class WorkbenchSessionStore {
     constructor() {
         this.api.setSessionToken(this.state.sessionToken);
         this.api.setUnauthorizedHandler(() => {
-            void this.bootstrapAnonymousSession();
+            this.setSessionToken("");
         });
     }
     subscribe(listener) {
@@ -45,6 +45,12 @@ export class WorkbenchSessionStore {
         this.persist();
         this.emit();
     }
+    resetGenerationState() {
+        this.stopProgressPolling();
+        this.state.generatedResult = null;
+        this.state.progressSnapshot = null;
+        this.state.currentRequestId = "";
+    }
     setAuthUid(value) {
         this.state.authUid = value;
         this.emit();
@@ -56,15 +62,9 @@ export class WorkbenchSessionStore {
     setSessionToken(token) {
         this.state.sessionToken = token;
         this.api.setSessionToken(token);
-        if (token) {
-            saveSessionToken(token);
-        }
-        else {
-            clearSessionToken();
-        }
     }
     clearSession() {
-        this.stopProgressPolling();
+        this.resetGenerationState();
         this.setSessionToken("");
         this.state.currentUser = "";
         this.state.oahStatus = null;
@@ -72,9 +72,6 @@ export class WorkbenchSessionStore {
         this.state.portraitList = [];
         this.state.portraitDocument = null;
         this.state.specNormalizeResponse = null;
-        this.state.generatedResult = null;
-        this.state.progressSnapshot = null;
-        this.state.currentRequestId = "";
         this.state.persisted.activePortraitId = "";
         this.persist();
     }
@@ -172,8 +169,7 @@ export class WorkbenchSessionStore {
         this.emit();
     }
     async restorePortrait() {
-        const preferredPortraitId = this.state.persisted.activePortraitId;
-        const portraitId = preferredPortraitId || normalizeString(this.state.portraitList[0]?.portrait_id);
+        const portraitId = normalizeString(this.state.persisted.activePortraitId);
         if (!portraitId) {
             this.state.portraitDocument = null;
             this.state.specNormalizeResponse = null;
@@ -182,8 +178,18 @@ export class WorkbenchSessionStore {
         }
         await this.loadPortrait(portraitId, false);
     }
+    startNewPortraitDraft() {
+        this.resetGenerationState();
+        this.state.portraitDocument = null;
+        this.state.specNormalizeResponse = null;
+        this.state.persisted.activePortraitId = "";
+        this.state.persisted.latestPortraitReplyDraft = "";
+        this.persist();
+        this.emit();
+    }
     async loadPortrait(portraitId, announce = true) {
         const response = await this.api.getPortrait(portraitId);
+        this.resetGenerationState();
         this.state.portraitDocument = response.portrait || null;
         this.state.specNormalizeResponse = this.state.portraitDocument?.spec && this.state.portraitDocument?.plan
             ? {
@@ -192,6 +198,7 @@ export class WorkbenchSessionStore {
             }
             : null;
         this.state.persisted.activePortraitId = normalizeString(this.state.portraitDocument?.portrait_id);
+        this.applyPortraitDraftToRequestDraft();
         this.persist();
         if (announce) {
             this.emit();
@@ -229,9 +236,16 @@ export class WorkbenchSessionStore {
         this.emit();
     }
     syncPortraitToDraft() {
+        if (!this.applyPortraitDraftToRequestDraft()) {
+            return;
+        }
+        this.persist();
+        this.emit();
+    }
+    applyPortraitDraftToRequestDraft() {
         const draft = this.state.portraitDocument?.draft;
         if (!draft) {
-            return;
+            return false;
         }
         this.state.persisted.latestKnowledgePointDraft = normalizeString(draft.knowledge_point);
         this.state.persisted.requestDraft = {
@@ -244,29 +258,32 @@ export class WorkbenchSessionStore {
             image_placement: normalizeString(draft.image_placement),
             image_targets: Array.isArray(draft.image_targets) ? draft.image_targets.map((item) => normalizeString(item)).filter(Boolean) : [],
         };
-        this.persist();
-        this.emit();
+        return true;
     }
     async startPortraitDialogue(message) {
         const response = await this.api.startPortrait(message);
+        this.resetGenerationState();
         this.state.portraitDocument = response.portrait || null;
         this.state.persisted.activePortraitId = normalizeString(this.state.portraitDocument?.portrait_id);
         this.state.persisted.latestPortraitReplyDraft = "";
         await this.refreshPortraitList();
         this.syncPortraitSpecState();
+        this.applyPortraitDraftToRequestDraft();
         this.persist();
         this.emit();
     }
     async sendPortraitReply(message) {
         const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
         if (!portraitId) {
-            throw new Error("请先开始画像对话。");
+            throw new Error("请先开始规范对话。");
         }
         const response = await this.api.replyPortrait(portraitId, message);
+        this.resetGenerationState();
         this.state.portraitDocument = response.portrait || null;
         this.state.persisted.latestPortraitReplyDraft = "";
         await this.refreshPortraitList();
         this.syncPortraitSpecState();
+        this.applyPortraitDraftToRequestDraft();
         this.persist();
         this.emit();
     }

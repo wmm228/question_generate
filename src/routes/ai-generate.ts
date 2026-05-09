@@ -1,15 +1,14 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 
 import { generateAiQuestion } from "../services/ai-generate";
+import { type AiGenerateStatusStore } from "../services/ai-generate-status";
 import { getOahCoreConfig } from "../services/oah-config";
-import {
-  type AiGenerateStatusStore,
-} from "../services/ai-generate-status";
 import { normalizeQuestionGenerationSpec } from "../services/question-agent-spec";
 import { normalizeAiGenPayload, validateAiGenPayload } from "../types/ai-generate";
 import { getRequestId, logEvent, serializeError } from "../utils/request";
 
 export type AuthMiddleware = RequestHandler;
+
 export interface AiGenerateRouterDependencies {
   requireAuth: AuthMiddleware;
   statusStore: AiGenerateStatusStore;
@@ -43,14 +42,14 @@ export function attachAiGenerateRoutes(
   const statusPath = options.statusPath ?? "/ai-generate-status/:requestId";
   const generatePath = options.generatePath ?? "/ai-generate";
 
-  router.get(statusPath, deps.requireAuth, (req: Request, res: Response) => {
+  router.get(statusPath, deps.requireAuth, async (req: Request, res: Response) => {
     const requestId = String(req.params.requestId || "").trim();
     if (!requestId) {
       res.status(400).json({ error: "缺少 requestId" });
       return;
     }
 
-    const snapshot = deps.statusStore.get(requestId);
+    const snapshot = await deps.statusStore.get(requestId);
     if (!snapshot) {
       res.status(404).json({ error: "未找到执行进度" });
       return;
@@ -62,8 +61,8 @@ export function attachAiGenerateRoutes(
   router.post(generatePath, deps.requireAuth, async (req: Request, res: Response) => {
     const reqStart = Date.now();
     const reqId = getRequestId(req);
-    deps.statusStore.ensure(reqId);
-    deps.statusStore.appendLog(reqId, "服务器已接收 AI 出题请求。");
+    await deps.statusStore.ensure(reqId);
+    await deps.statusStore.appendLog(reqId, "服务器已接收 AI 出题请求。");
 
     const body = readRequestBody(req);
     const normalizedSpec = normalizeQuestionGenerationSpec({
@@ -96,11 +95,11 @@ export function attachAiGenerateRoutes(
     });
 
     if (normalizedSpec.spec.status !== "ready") {
-      deps.statusStore.updateStage(reqId, "generate", "error", "教师侧试题规范尚未确认。");
-      deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未开始。");
-      deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未开始。");
-      deps.statusStore.appendLog(reqId, "教师确认尚未完成，已阻止本次生成。");
-      deps.statusStore.finish(reqId, "教师侧试题规范尚未确认。");
+      await deps.statusStore.updateStage(reqId, "generate", "error", "教师侧试题规范尚未确认。");
+      await deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未开始。");
+      await deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未开始。");
+      await deps.statusStore.appendLog(reqId, "教师确认尚未完成，已阻止本次生成。");
+      await deps.statusStore.finish(reqId, "教师侧试题规范尚未确认。");
       logEvent("warn", req, "ai_generate.spec.blocked", {
         spec_id: normalizedSpec.spec.spec_id,
         validation_errors: normalizedSpec.spec.validation_errors,
@@ -116,11 +115,11 @@ export function attachAiGenerateRoutes(
 
     const validationError = validateAiGenPayload(payload);
     if (validationError) {
-      deps.statusStore.updateStage(reqId, "generate", "error", "请求参数校验失败。");
-      deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未开始。");
-      deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未开始。");
-      deps.statusStore.appendLog(reqId, `请求参数校验失败：${validationError}`);
-      deps.statusStore.finish(reqId, validationError);
+      await deps.statusStore.updateStage(reqId, "generate", "error", "请求参数校验失败。");
+      await deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未开始。");
+      await deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未开始。");
+      await deps.statusStore.appendLog(reqId, `请求参数校验失败：${validationError}`);
+      await deps.statusStore.finish(reqId, validationError);
       logEvent("warn", req, "ai_generate.request.invalid", {
         spec_id: normalizedSpec.spec.spec_id,
         error_message: validationError,
@@ -130,7 +129,7 @@ export function attachAiGenerateRoutes(
     }
 
     try {
-      deps.statusStore.appendLog(
+      await deps.statusStore.appendLog(
         reqId,
         `规范已确认，正在调用生成智能体 ${normalizedSpec.spec.generation_contract.generator_agent}。`,
       );
@@ -147,15 +146,15 @@ export function attachAiGenerateRoutes(
         reqId,
         normalizedSpec,
         (event) => {
-          deps.statusStore.applyProgressEvent(reqId, event);
+          void deps.statusStore.applyProgressEvent(reqId, event).catch(() => undefined);
         },
       );
 
-      deps.statusStore.updateStage(reqId, "generate", "done", "草稿生成已完成。");
-      deps.statusStore.updateStage(reqId, "evaluate", "done", "评估与修订已完成。");
-      deps.statusStore.updateStage(reqId, "render", "done", "最终响应组装已完成。");
-      deps.statusStore.appendLog(reqId, "AI 出题流程已完成。");
-      deps.statusStore.finish(reqId);
+      await deps.statusStore.updateStage(reqId, "generate", "done", "草稿生成已完成。");
+      await deps.statusStore.updateStage(reqId, "evaluate", "done", "评估与修订已完成。");
+      await deps.statusStore.updateStage(reqId, "render", "done", "最终响应组装已完成。");
+      await deps.statusStore.appendLog(reqId, "AI 出题流程已完成。");
+      await deps.statusStore.finish(reqId);
 
       logEvent("info", req, "ai_generate.response.generated", {
         duration_ms: Date.now() - reqStart,
@@ -168,11 +167,11 @@ export function attachAiGenerateRoutes(
       const message = error instanceof Error ? error.message : String(error);
       const oahConfig = getOahCoreConfig();
       const configuredModelRef = oahConfig.model || "";
-      deps.statusStore.updateStage(reqId, "generate", "error", "生成阶段未成功完成。");
-      deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未成功完成。");
-      deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未成功完成。");
-      deps.statusStore.appendLog(reqId, `流程执行失败：${message}`);
-      deps.statusStore.finish(reqId, message);
+      await deps.statusStore.updateStage(reqId, "generate", "error", "生成阶段未成功完成。");
+      await deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未成功完成。");
+      await deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未成功完成。");
+      await deps.statusStore.appendLog(reqId, `流程执行失败：${message}`);
+      await deps.statusStore.finish(reqId, message);
       logEvent("error", req, "ai_generate.response.failed", {
         duration_ms: Date.now() - reqStart,
         error: serializeError(error),

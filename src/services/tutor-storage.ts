@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-import type { TutorServerPaths, TutorStateBackend } from "./server-paths";
+import type { TutorPostgresConfig, TutorServerPaths, TutorStateBackend } from "./server-paths";
 import {
   createFileSystemAiGenerateStatusStore,
   createInMemoryAiGenerateStatusStore,
@@ -13,10 +13,12 @@ import {
   type QuestionPortraitStore,
 } from "./question-portrait-store";
 import { createInMemoryTutorAuthStore, createJsonFileTutorAuthStore, type TutorAuthStore } from "./tutor-auth-store";
+import { createTutorPostgresRuntime } from "./tutor-postgres";
 
 export interface CreateTutorStorageDependencies {
   backend: TutorStateBackend;
   paths: Pick<TutorServerPaths, "usersPath" | "sessionsPath" | "stateDirectory">;
+  postgres: TutorPostgresConfig;
 }
 
 export interface TutorStorage {
@@ -29,6 +31,7 @@ export interface TutorStorage {
     usersPath: string | null;
     sessionsPath: string | null;
   };
+  close(): Promise<void>;
 }
 
 function ensureDirectory(dirPath: string): void {
@@ -45,7 +48,7 @@ function seedFileIfMissing(sourcePath: string, targetPath: string): void {
   fs.copyFileSync(sourcePath, targetPath);
 }
 
-export function createTutorStorage(deps: CreateTutorStorageDependencies): TutorStorage {
+export async function createTutorStorage(deps: CreateTutorStorageDependencies): Promise<TutorStorage> {
   if (deps.backend === "memory") {
     return {
       backend: "memory",
@@ -56,6 +59,27 @@ export function createTutorStorage(deps: CreateTutorStorageDependencies): TutorS
         stateDirectory: deps.paths.stateDirectory,
         usersPath: null,
         sessionsPath: null,
+      },
+      async close(): Promise<void> {
+        return;
+      },
+    };
+  }
+
+  if (deps.backend === "postgres") {
+    const runtime = await createTutorPostgresRuntime(deps.postgres);
+    return {
+      backend: "postgres",
+      authStore: runtime.authStore,
+      aiGenerateStatusStore: runtime.aiGenerateStatusStore,
+      questionPortraitStore: runtime.questionPortraitStore,
+      paths: {
+        stateDirectory: deps.paths.stateDirectory,
+        usersPath: null,
+        sessionsPath: null,
+      },
+      close(): Promise<void> {
+        return runtime.close();
       },
     };
   }
@@ -83,6 +107,9 @@ export function createTutorStorage(deps: CreateTutorStorageDependencies): TutorS
       stateDirectory: deps.paths.stateDirectory,
       usersPath,
       sessionsPath,
+    },
+    async close(): Promise<void> {
+      return;
     },
   };
 }

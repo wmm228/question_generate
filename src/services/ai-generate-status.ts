@@ -26,17 +26,17 @@ export interface AiGenerateStatusSnapshot {
 }
 
 export interface AiGenerateStatusStore {
-  ensure(requestId: string): AiGenerateStatusSnapshot;
-  get(requestId: string): AiGenerateStatusSnapshot | null;
+  ensure(requestId: string): Promise<AiGenerateStatusSnapshot>;
+  get(requestId: string): Promise<AiGenerateStatusSnapshot | null>;
   updateStage(
     requestId: string,
     key: string,
     state: AiGenerateStageState,
     detail: string,
-  ): AiGenerateStatusSnapshot;
-  appendLog(requestId: string, message: string): AiGenerateStatusSnapshot;
-  finish(requestId: string, error?: string): AiGenerateStatusSnapshot;
-  applyProgressEvent(requestId: string, event: AiGenerateProgressEvent): AiGenerateStatusSnapshot;
+  ): Promise<AiGenerateStatusSnapshot>;
+  appendLog(requestId: string, message: string): Promise<AiGenerateStatusSnapshot>;
+  finish(requestId: string, error?: string): Promise<AiGenerateStatusSnapshot>;
+  applyProgressEvent(requestId: string, event: AiGenerateProgressEvent): Promise<AiGenerateStatusSnapshot>;
 }
 
 export interface InMemoryAiGenerateStatusStoreOptions {
@@ -162,71 +162,71 @@ function normalizeStatusSnapshot(requestId: string, value: unknown): AiGenerateS
 }
 
 function createInMemoryStoreOperations(
-  loadSnapshot: (requestId: string) => AiGenerateStatusSnapshot | null,
-  saveSnapshot: (snapshot: AiGenerateStatusSnapshot) => void,
-  cleanup: () => void,
+  loadSnapshot: (requestId: string) => Promise<AiGenerateStatusSnapshot | null>,
+  saveSnapshot: (snapshot: AiGenerateStatusSnapshot) => Promise<void>,
+  cleanup: () => Promise<void>,
 ): AiGenerateStatusStore {
-  function ensure(requestId: string): AiGenerateStatusSnapshot {
-    cleanup();
-    const existing = loadSnapshot(requestId);
+  async function ensure(requestId: string): Promise<AiGenerateStatusSnapshot> {
+    await cleanup();
+    const existing = await loadSnapshot(requestId);
     if (existing) {
       return existing;
     }
     const created = createInitialSnapshot(requestId);
-    saveSnapshot(created);
+    await saveSnapshot(created);
     return created;
   }
 
-  function get(requestId: string): AiGenerateStatusSnapshot | null {
-    cleanup();
+  async function get(requestId: string): Promise<AiGenerateStatusSnapshot | null> {
+    await cleanup();
     return loadSnapshot(requestId);
   }
 
-  function updateStage(
+  async function updateStage(
     requestId: string,
     key: string,
     state: AiGenerateStageState,
     detail: string,
-  ): AiGenerateStatusSnapshot {
-    const snapshot = ensure(requestId);
+  ): Promise<AiGenerateStatusSnapshot> {
+    const snapshot = await ensure(requestId);
     const updatedAt = nowIso();
     snapshot.updatedAt = updatedAt;
     snapshot.stages = snapshot.stages.map((stage) => (stage.key === key
       ? { ...stage, state, detail, updatedAt }
       : stage));
-    saveSnapshot(snapshot);
+    await saveSnapshot(snapshot);
     return snapshot;
   }
 
-  function appendLog(requestId: string, message: string): AiGenerateStatusSnapshot {
-    const snapshot = ensure(requestId);
+  async function appendLog(requestId: string, message: string): Promise<AiGenerateStatusSnapshot> {
+    const snapshot = await ensure(requestId);
     snapshot.updatedAt = nowIso();
     snapshot.logs.push(message);
     if (snapshot.logs.length > 30) {
       snapshot.logs = snapshot.logs.slice(snapshot.logs.length - 30);
     }
-    saveSnapshot(snapshot);
+    await saveSnapshot(snapshot);
     return snapshot;
   }
 
-  function finish(requestId: string, error?: string): AiGenerateStatusSnapshot {
-    const snapshot = ensure(requestId);
+  async function finish(requestId: string, error?: string): Promise<AiGenerateStatusSnapshot> {
+    const snapshot = await ensure(requestId);
     snapshot.updatedAt = nowIso();
     snapshot.finished = true;
     if (error) {
       snapshot.error = error;
     }
-    saveSnapshot(snapshot);
+    await saveSnapshot(snapshot);
     return snapshot;
   }
 
-  function applyProgressEvent(
+  async function applyProgressEvent(
     requestId: string,
     event: AiGenerateProgressEvent,
-  ): AiGenerateStatusSnapshot {
-    const snapshot = updateStage(requestId, event.stage, event.state, event.detail);
+  ): Promise<AiGenerateStatusSnapshot> {
+    const snapshot = await updateStage(requestId, event.stage, event.state, event.detail);
     if (event.log) {
-      appendLog(requestId, event.log);
+      await appendLog(requestId, event.log);
     }
     return snapshot;
   }
@@ -247,7 +247,7 @@ export function createInMemoryAiGenerateStatusStore(
   const ttlMs = options.ttlMs ?? DEFAULT_AI_GENERATE_STATUS_TTL_MS;
   const snapshots = new Map<string, AiGenerateStatusSnapshot>();
 
-  function cleanup(): void {
+  async function cleanup(): Promise<void> {
     const cutoff = Date.now() - ttlMs;
     for (const [requestId, snapshot] of Array.from(snapshots.entries())) {
       if (Date.parse(snapshot.updatedAt) < cutoff) {
@@ -257,8 +257,8 @@ export function createInMemoryAiGenerateStatusStore(
   }
 
   return createInMemoryStoreOperations(
-    (requestId) => snapshots.get(requestId) ?? null,
-    (snapshot) => {
+    async (requestId) => snapshots.get(requestId) ?? null,
+    async (snapshot) => {
       snapshots.set(snapshot.requestId, snapshot);
     },
     cleanup,
@@ -289,7 +289,7 @@ export function createFileSystemAiGenerateStatusStore(
     return Date.now() - fs.statSync(filePath).mtimeMs > ttlMs;
   }
 
-  function cleanup(): void {
+  async function cleanup(): Promise<void> {
     ensureDirectory(statusDirectory);
     for (const entry of fs.readdirSync(statusDirectory)) {
       if (!entry.endsWith(".json")) {
@@ -303,7 +303,7 @@ export function createFileSystemAiGenerateStatusStore(
   }
 
   return createInMemoryStoreOperations(
-    (requestId) => {
+    async (requestId) => {
       const filePath = getSnapshotPath(requestId);
       if (!fs.existsSync(filePath)) {
         return null;
@@ -324,7 +324,7 @@ export function createFileSystemAiGenerateStatusStore(
         return null;
       }
     },
-    (snapshot) => {
+    async (snapshot) => {
       const filePath = getSnapshotPath(snapshot.requestId);
       fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2), "utf-8");
     },

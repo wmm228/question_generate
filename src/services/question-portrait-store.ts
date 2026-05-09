@@ -14,9 +14,9 @@ export interface QuestionPortraitListItem {
 }
 
 export interface QuestionPortraitStore {
-  load(ownerUid: string, portraitId: string): QuestionPortraitDocument | null;
-  save(document: QuestionPortraitDocument): QuestionPortraitDocument;
-  list(ownerUid: string): QuestionPortraitListItem[];
+  load(ownerUid: string, portraitId: string): Promise<QuestionPortraitDocument | null>;
+  save(document: QuestionPortraitDocument): Promise<QuestionPortraitDocument>;
+  list(ownerUid: string): Promise<QuestionPortraitListItem[]>;
 }
 
 interface FileSystemQuestionPortraitStoreOptions {
@@ -75,19 +75,19 @@ export function createInMemoryQuestionPortraitStore(): QuestionPortraitStore {
   const documents = new Map<string, QuestionPortraitDocument>();
 
   return {
-    load(ownerUid: string, portraitId: string): QuestionPortraitDocument | null {
+    async load(ownerUid: string, portraitId: string): Promise<QuestionPortraitDocument | null> {
       const document = documents.get(portraitId);
       if (!document || document.owner_uid !== ownerUid) {
         return null;
       }
       return JSON.parse(JSON.stringify(document)) as QuestionPortraitDocument;
     },
-    save(document: QuestionPortraitDocument): QuestionPortraitDocument {
+    async save(document: QuestionPortraitDocument): Promise<QuestionPortraitDocument> {
       const cloned = JSON.parse(JSON.stringify(document)) as QuestionPortraitDocument;
       documents.set(document.portrait_id, cloned);
       return JSON.parse(JSON.stringify(cloned)) as QuestionPortraitDocument;
     },
-    list(ownerUid: string): QuestionPortraitListItem[] {
+    async list(ownerUid: string): Promise<QuestionPortraitListItem[]> {
       const items = Array.from(documents.values())
         .filter((document) => document.owner_uid === ownerUid)
         .map((document) => toPortraitListItem(document));
@@ -115,7 +115,7 @@ export function createFileSystemQuestionPortraitStore(
   }
 
   return {
-    load(ownerUid: string, portraitId: string): QuestionPortraitDocument | null {
+    async load(ownerUid: string, portraitId: string): Promise<QuestionPortraitDocument | null> {
       const statePath = getStatePath(portraitId);
       if (!fs.existsSync(statePath)) {
         return null;
@@ -130,7 +130,7 @@ export function createFileSystemQuestionPortraitStore(
         markdown_path: markdownPath,
       };
     },
-    save(document: QuestionPortraitDocument): QuestionPortraitDocument {
+    async save(document: QuestionPortraitDocument): Promise<QuestionPortraitDocument> {
       const portraitDirectory = getPortraitDirectory(document.portrait_id);
       const statePath = getStatePath(document.portrait_id);
       const markdownPath = getMarkdownPath(document.portrait_id);
@@ -143,7 +143,7 @@ export function createFileSystemQuestionPortraitStore(
       fs.writeFileSync(markdownPath, nextDocument.markdown, "utf-8");
       return nextDocument;
     },
-    list(ownerUid: string): QuestionPortraitListItem[] {
+    async list(ownerUid: string): Promise<QuestionPortraitListItem[]> {
       const portraitIds = fs.readdirSync(baseDirectory, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name);

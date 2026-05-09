@@ -38,6 +38,7 @@ export interface OahStatusEnvelope {
 export interface WorkbenchLayoutState {
   sidebarWidth: number;
   chatPanelWidth: number;
+  inspectorWidth: number;
   sidebarCollapsed: boolean;
   inspectorCollapsed: boolean;
 }
@@ -252,8 +253,9 @@ export const DEFAULT_PERSISTED_STATE: PersistedWorkbenchState = {
     image_targets: [],
   },
   layout: {
-    sidebarWidth: 280,
-    chatPanelWidth: 1.5,
+    sidebarWidth: 240,
+    chatPanelWidth: 3.4,
+    inspectorWidth: 300,
     sidebarCollapsed: false,
     inspectorCollapsed: false,
   },

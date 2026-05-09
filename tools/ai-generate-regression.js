@@ -218,17 +218,34 @@ function run() {
     assert(isRecord(contract.tool_routing.by_content_mode[contentMode]), `missing content-mode route: ${contentMode}`);
   }
 
+  const workbenchApiSource = fs.readFileSync(
+    path.resolve(process.cwd(), "src/frontend/question-agent-workbench-api.ts"),
+    "utf8",
+  );
+  assert(
+    workbenchApiSource.includes("/api/ai-question/generate"),
+    "question-agent workbench API should call /api/ai-question/generate",
+  );
+  assert(
+    workbenchApiSource.includes("/api/ai-question/status/"),
+    "question-agent workbench API should call /api/ai-question/status/:requestId",
+  );
+
   const workbenchSource = fs.readFileSync(
     path.resolve(process.cwd(), "src/frontend/question-agent-workbench.ts"),
     "utf8",
   );
   assert(
-    workbenchSource.includes("/api/ai-question/generate"),
-    "question-agent workbench should call /api/ai-question/generate",
+    workbenchSource.includes("sendingPortraitReply"),
+    "portrait chat should guard against duplicate send submissions",
   );
   assert(
-    workbenchSource.includes("/api/ai-question/status/"),
-    "question-agent workbench should call /api/ai-question/status/:requestId",
+    workbenchSource.includes("renderLocalTeacherNoticeMarkup"),
+    "generation chat should render the teacher command as a normal local message",
+  );
+  assert(
+    !workbenchSource.includes("endAssistantWait(false)"),
+    "generation chat should not leave a stale pending teacher bubble after completion",
   );
 
   console.log("ai-generate regression: ok");

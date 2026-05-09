@@ -4,7 +4,7 @@ import type {
 import { DEFAULT_PERSISTED_STATE } from "./question-agent-workbench-types.js";
 
 const STORAGE_PREFIX = "tutor_question_workbench_";
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 9;
 const STORAGE_KEY = `${STORAGE_PREFIX}state`;
 
 interface StorageWrapper<T> {
@@ -45,6 +45,10 @@ export function loadWorkbenchState(): PersistedWorkbenchState {
       requestDraft: {
         ...structuredClone(DEFAULT_PERSISTED_STATE.requestDraft),
         ...(wrapper.data.requestDraft || {}),
+      },
+      layout: {
+        ...structuredClone(DEFAULT_PERSISTED_STATE.layout),
+        ...(wrapper.data.layout || {}),
       },
     };
   } catch {

@@ -1,0 +1,38 @@
+# Tutor server requirements
+#
+# Note:
+# - This project is a Node.js service, not a Python project.
+# - This file documents server/runtime requirements for deployment.
+# - JavaScript dependencies are managed by package.json and package-lock.json.
+
+Node.js >= 22
+npm >= 10
+git
+
+# Recommended
+pm2
+nginx
+
+# Required external service
+OAH API reachable via OAH_BASE_URL
+
+# Recommended server spec for Tutor only
+CPU: 2 cores
+RAM: 4 GB
+Disk: 40 GB
+OS: Debian 12 / Ubuntu 22.04+ LTS
+
+# Required env vars
+OAH_BASE_URL=http://YOUR_OAH_HOST:8787
+OAH_AGENT_NAME=question-orchestrator
+OAH_WORKSPACE_RUNTIME=tutor-question-generation
+OAH_WORKSPACE_NAME=tutor-question-generation
+OAH_WORKSPACE_OWNER_ID=tutor
+OAH_WORKSPACE_AUTO_CREATE=true
+OAH_RUN_POLL_INTERVAL_MS=1000
+
+# Optional env vars
+OAH_MODEL_NAME=platform/kimi-k25
+TUTOR_PORT=7896
+TUTOR_STORAGE_BACKEND=filesystem
+SESSION_TTL_MS=2592000000

@@ -18,7 +18,7 @@ export interface CreateTutorAppDependencies {
 
 export interface TutorApp {
   app: Express;
-  close(): void;
+  close(): Promise<void>;
 }
 
 function applyNoCacheHeaders(res: Response): void {
@@ -27,15 +27,16 @@ function applyNoCacheHeaders(res: Response): void {
   res.setHeader("Expires", "0");
 }
 
-export function createTutorApp(deps: CreateTutorAppDependencies): TutorApp {
+export async function createTutorApp(deps: CreateTutorAppDependencies): Promise<TutorApp> {
   const app = express();
-  const storage = createTutorStorage({
+  const storage = await createTutorStorage({
     backend: deps.environment.storageBackend,
     paths: {
       usersPath: deps.paths.usersPath,
       sessionsPath: deps.paths.sessionsPath,
       stateDirectory: deps.paths.stateDirectory,
     },
+    postgres: deps.environment.postgres,
   });
   const authService = createTutorAuthService({
     store: storage.authStore,
@@ -101,8 +102,8 @@ export function createTutorApp(deps: CreateTutorAppDependencies): TutorApp {
 
   return {
     app,
-    close(): void {
-      return;
+    async close(): Promise<void> {
+      await storage.close();
     },
   };
 }
