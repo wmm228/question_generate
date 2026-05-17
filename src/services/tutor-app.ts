@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response } from "express";
+import path from "path";
 
 import { createAuthRouter, createRequireAuth, createUidResolver } from "../routes/auth";
 import { createQuestionAgentRouter } from "../routes/question-agent";
@@ -27,6 +28,26 @@ function applyNoCacheHeaders(res: Response): void {
   res.setHeader("Expires", "0");
 }
 
+function applyGeneratedOutputHeaders(res: Response): void {
+  applyNoCacheHeaders(res);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'none'",
+      "img-src 'self' data:",
+      "style-src 'unsafe-inline'",
+      "script-src 'none'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+      "frame-ancestors 'none'",
+      "sandbox",
+    ].join("; "),
+  );
+}
+
 export async function createTutorApp(deps: CreateTutorAppDependencies): Promise<TutorApp> {
   const app = express();
   const storage = await createTutorStorage({
@@ -41,6 +62,9 @@ export async function createTutorApp(deps: CreateTutorAppDependencies): Promise<
   const authService = createTutorAuthService({
     store: storage.authStore,
     sessionTtlMs: deps.environment.sessionTtlMs,
+    zitadel: deps.environment.zitadel,
+    zitadelEnabled: deps.environment.zitadel.enabled,
+    authBypassUid: deps.environment.authBypass.enabled ? deps.environment.authBypass.uid : "",
   });
   const requireAuth = createRequireAuth(authService);
   const getUidFromReq = createUidResolver(authService);
@@ -55,6 +79,11 @@ export async function createTutorApp(deps: CreateTutorAppDependencies): Promise<
     storage_directory: deps.paths.stateDirectory,
     storage_users_path: storage.paths.usersPath,
     storage_sessions_path: storage.paths.sessionsPath,
+    auth_provider: deps.environment.authBypass.enabled ? "bypass" : deps.environment.zitadel.enabled ? "zitadel" : "local",
+    auth_bypass_uid: deps.environment.authBypass.enabled ? deps.environment.authBypass.uid : "",
+    zitadel_base_url: deps.environment.zitadel.enabled ? deps.environment.zitadel.baseUrl : "",
+    zitadel_client_id_configured: Boolean(deps.environment.zitadel.clientId),
+    zitadel_pat_configured: Boolean(deps.environment.zitadel.personalAccessToken),
   });
 
   app.use((req: Request, res: Response, next) => {
@@ -85,6 +114,13 @@ export async function createTutorApp(deps: CreateTutorAppDependencies): Promise<
       applyNoCacheHeaders(res);
     },
   }));
+  app.use("/output/ai-generated-visuals", express.static(path.join(deps.paths.appRoot, "output", "ai-generated-visuals"), {
+    etag: false,
+    maxAge: 0,
+    setHeaders: (res) => {
+      applyGeneratedOutputHeaders(res);
+    },
+  }));
 
   app.use(createTutorFrontendRouter({
     startupId: deps.startupId,
@@ -98,6 +134,10 @@ export async function createTutorApp(deps: CreateTutorAppDependencies): Promise<
     statusStore: storage.aiGenerateStatusStore,
     getUidFromReq,
     portraitStore: storage.questionPortraitStore,
+    feedbackStore: storage.questionFeedbackStore,
+    staticDirectory: deps.paths.staticDirectory,
+    appRoot: deps.paths.appRoot,
+    workspaceRoot: deps.paths.workspaceRoot,
   }));
 
   return {

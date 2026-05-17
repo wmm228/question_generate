@@ -60,6 +60,7 @@ const AI_GEN_IMAGE_MODE_SET = new Set<string>(AI_GEN_IMAGE_MODES);
 const AI_GEN_ALGORITHM_SET = new Set<string>(AI_GEN_ALGORITHMS);
 
 export interface AiGenPayloadInput {
+  subject?: unknown;
   knowledge_point?: unknown;
   difficulty?: unknown;
   algorithm?: unknown;
@@ -71,6 +72,7 @@ export interface AiGenPayloadInput {
 }
 
 export interface AiGenPayload {
+  subject: string;
   knowledge_point: string;
   difficulty: string;
   algorithm: AiGenAlgorithm;
@@ -82,6 +84,7 @@ export interface AiGenPayload {
 }
 
 export interface AiGenerateRequestMeta {
+  subject: string;
   question_type: AiGenQuestionType;
   question_type_label: string;
   content_mode: AiGenContentMode;
@@ -136,7 +139,7 @@ export interface AiGenerateVisualPipelineMeta {
   image_mode: AiGenImageMode;
   image_targets: AiGenImageTarget[];
   status: "not_requested" | "pending" | "completed" | "failed";
-  provider: "oah_manim" | "visual_solver_bridge" | "none";
+  provider: "safe_svg" | "visual_solver_bridge" | "none";
   stage: "idle" | "render_pending" | "rendered" | "failed";
 }
 
@@ -146,6 +149,7 @@ export interface AiGenerateResponse {
   solution_steps: string[];
   ground_truth: string;
   image_position?: AiGenImagePlacementOrEmpty;
+  image_svg?: string;
   image_code?: string;
   meta: AiGenerateRequestMeta;
   request: AiGenerateRequestMeta;
@@ -240,6 +244,7 @@ function normalizeTargetsForQuestionType(
 }
 
 export function normalizeAiGenPayload(body: AiGenPayloadInput): AiGenPayload {
+  const subject = normalizeString(body.subject);
   const knowledge_point = normalizeString(body.knowledge_point);
   const difficulty = normalizeString(body.difficulty);
   const algorithm = normalizeAlgorithm(body.algorithm);
@@ -265,6 +270,7 @@ export function normalizeAiGenPayload(body: AiGenPayloadInput): AiGenPayload {
   const image_placement = content_mode === "image" ? deriveImagePlacement(image_targets) : "";
 
   return {
+    subject,
     knowledge_point,
     difficulty,
     algorithm,
@@ -278,6 +284,7 @@ export function normalizeAiGenPayload(body: AiGenPayloadInput): AiGenPayload {
 
 export function validateAiGenPayload(payload: AiGenPayload): string | null {
   const {
+    subject,
     knowledge_point,
     difficulty,
     algorithm,
@@ -288,7 +295,7 @@ export function validateAiGenPayload(payload: AiGenPayload): string | null {
     image_mode,
   } = payload;
 
-  if (!knowledge_point || !difficulty || !algorithm || !question_type || !content_mode) {
+  if (!subject || !knowledge_point || !difficulty || !algorithm || !question_type || !content_mode) {
     return "缺少必要参数";
   }
   if (!AI_GEN_QUESTION_TYPE_SET.has(question_type)) {

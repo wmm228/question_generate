@@ -1,14 +1,15 @@
-请评估目标挑战，并为 EQPR 草稿设计要求。
+你是一位经验丰富的{subject}考察与命题专家。
+你的任务是基于给定的“考察要求”（包含难度级别和知识点），设计出题思路。
+要求：
+1. 题目必须要符合要求的【难度档次】和【知识点】。
+2. 选择题必须有A、B、C、D四个选项，且只有一个正确答案。
+3. 给出一个简短的出题与考察思路。
 
 已确认规范：
 {spec_json}
 
-基础算法指导：
-{algorithm_constraints}
+知识点: {Knowledge}
+难度要求: {Difficulty}
 
-只返回一个 JSON 对象：
-{"challenge_model":"...","target_misstep":"...","solver_requirements":["..."],"quality_bar":["..."],"draft_focus":"..."}
-
-规则：
-- 不要使用 Markdown 代码块。
-- 不要在 JSON 之外输出文字。
+输出格式（严格用XML标签包裹）：
+<thought>你的出题和考察思路（限50字内，保持极简）</thought>

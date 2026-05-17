@@ -29,7 +29,6 @@ COPY --from=builder /app/static ./static
 COPY src ./src
 COPY oah-runtimes ./oah-runtimes
 COPY resources ./resources
-COPY users.json ./users.json
 
 RUN mkdir -p /app/resources/runtime-state /app/logs /app/output \
   && chown -R node:node /app

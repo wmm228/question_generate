@@ -3,8 +3,10 @@ node_modules/
 dist/
 logs/
 output/
+.tmp/
 
 .env
+.env.docker.local
 server.err.log
 server.out.log
 server.lock.json
@@ -12,5 +14,7 @@ sessions.json
 users.json
 
 resources/runtime-state/
+.docker-local/
+cloudflared/
 
 *.log

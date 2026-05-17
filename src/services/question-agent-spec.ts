@@ -88,6 +88,8 @@ function normalizeImageMode(value: AiGenPayload["image_mode"]): AiGenImageMode {
 
 function hasExplicitConfirmation(input: QuestionSpecInput, payload: AiGenPayload, field: string): boolean {
   switch (field) {
+    case "subject":
+      return Boolean(normalizeString(input.subject));
     case "knowledge_point":
       return Boolean(normalizeString(input.knowledge_point));
     case "difficulty":
@@ -147,7 +149,7 @@ export function normalizeStudentProfile(value: unknown, now = new Date()): Stude
 
 function buildSpecId(payload: AiGenPayload, requestId: string): string {
   const digest = createHash("sha256")
-    .update(`${requestId}:${payload.knowledge_point}:${payload.difficulty}:${payload.algorithm}:${payload.content_mode}`)
+    .update(`${requestId}:${payload.subject}:${payload.knowledge_point}:${payload.difficulty}:${payload.algorithm}:${payload.content_mode}`)
     .digest("hex")
     .slice(0, 16);
   return `qspec_${digest}`;
@@ -227,7 +229,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
       {
         role: spec.generation_contract.evaluator_agent,
         action: spec.content_mode === "image"
-          ? "Evaluate schema validity, educational quality, difficulty fit, Manim render safety, and image relevance."
+          ? "Evaluate schema validity, educational quality, difficulty fit, SVG safety, and image relevance."
           : "Evaluate schema validity, educational quality, difficulty fit, and answer correctness.",
         tools: [...modeRouting.evaluator_tools],
         blocks_generation: false,
@@ -267,6 +269,7 @@ export function normalizeQuestionGenerationSpec(input: QuestionSpecInput): Quest
     request_uuid: requestId,
     version: contract.spec_version,
     status: validationErrors.length > 0 ? "blocked" : "ready",
+    subject: payload.subject,
     knowledge_point: payload.knowledge_point,
     difficulty_level: Number.parseInt(payload.difficulty, 10),
     question_type: payload.question_type,
@@ -275,7 +278,7 @@ export function normalizeQuestionGenerationSpec(input: QuestionSpecInput): Quest
     image_requirement: {
       mode: normalizeImageMode(payload.image_mode),
       targets: normalizeImageTargets(payload.image_targets),
-      renderer: payload.content_mode === "image" ? "manim" : "none",
+      renderer: payload.content_mode === "image" ? "safe_svg" : "none",
       must_be_answer_relevant: payload.content_mode === "image",
     },
     teacher_profile: teacherProfile,

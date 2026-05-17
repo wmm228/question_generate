@@ -4,6 +4,7 @@ models:
     ref: platform/kimi-k25
     temperature: 0.1
     top_p: 0.7
+    max_tokens: 3072
   generator:
     ref: platform/kimi-k25
     temperature: 0.35

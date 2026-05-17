@@ -33,6 +33,7 @@ function buildPayload(
   imagePlacement: AiGenImagePlacementOrEmpty,
 ): AiGenPayload {
   return {
+    subject: "数学",
     knowledge_point: knowledgeId,
     difficulty: String(difficultyTarget),
     algorithm: "evoq",
@@ -130,14 +131,19 @@ export async function runGa(
   });
 
   const population = populationResult.candidates.map((candidate) => {
-    const finalQuestion = candidate.raw.question.split(/\r?\n/)[0]?.trim() || candidate.raw.question;
+    const questionLines = candidate.raw.question.split(/\r?\n/);
+    const embeddedOptions = questionLines
+      .map((line) => line.trim())
+      .filter((line) => /^[A-D]\s*[.、:：)]/.test(line));
+    const finalQuestion = candidate.raw.options && candidate.raw.options.length > 0
+      ? candidate.raw.question
+      : questionLines[0]?.trim() || candidate.raw.question;
     return {
       id: candidate.id,
       question: finalQuestion,
-      options: candidate.raw.question
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => /^[A-D]\s*[.、:：)]/.test(line)),
+      options: candidate.raw.options && candidate.raw.options.length > 0
+        ? candidate.raw.options
+        : embeddedOptions,
       answer: candidate.raw.ground_truth,
       explanation: candidate.raw.solution_steps.join("\n"),
     };

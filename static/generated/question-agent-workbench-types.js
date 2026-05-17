@@ -48,6 +48,7 @@ export const DEFAULT_PERSISTED_STATE = {
     latestKnowledgePointDraft: "",
     latestPortraitReplyDraft: "",
     requestDraft: {
+        subject: "",
         difficulty: "2",
         algorithm: "direct",
         question_type: "multiple_choice",
@@ -59,8 +60,8 @@ export const DEFAULT_PERSISTED_STATE = {
     layout: {
         sidebarWidth: 240,
         chatPanelWidth: 3.4,
-        inspectorWidth: 300,
+        inspectorWidth: 460,
         sidebarCollapsed: false,
-        inspectorCollapsed: false,
+        inspectorCollapsed: true,
     },
 };

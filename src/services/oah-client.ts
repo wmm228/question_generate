@@ -157,10 +157,19 @@ export interface OahSessionRunOptions {
   workspaceServiceName?: string;
   workspaceAutoCreate?: boolean;
   runPollIntervalMs?: number;
+  runTimeoutMs?: number;
+  requestTimeoutMs?: number;
+  modelRetryAttempts?: number;
+  modelRetryDelayMs?: number;
+  modelFallbackEnabled?: boolean;
 }
 
 const RUN_TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "timed_out"]);
 const DEFAULT_OAH_RUN_POLL_INTERVAL_MS = 1000;
+const DEFAULT_OAH_RUN_TIMEOUT_MS = 1_800_000;
+const DEFAULT_OAH_REQUEST_TIMEOUT_MS = 240_000;
+const DEFAULT_OAH_MODEL_RETRY_DELAY_MS = 5000;
+const DEFAULT_OAH_MODEL_RETRY_ATTEMPTS = 2;
 
 export interface OahSessionRunResult {
   text: string;
@@ -239,13 +248,21 @@ function isEnabledFlag(value: string | undefined): boolean {
 function isModelFallbackEnabled(): boolean {
   const raw = (process.env.OAH_MODEL_FALLBACK_ENABLED || "").trim().toLowerCase();
   if (!raw) {
-    return true;
+    return false;
   }
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
 function normalizeModelRef(value: string | undefined): string {
   return (value || "").trim();
+}
+
+function readConfiguredModelPriority(): string[] {
+  const raw = (process.env.OAH_MODEL_PRIORITY || "").trim();
+  if (!raw) {
+    return [];
+  }
+  return [...new Set(raw.split(",").map((item) => normalizeModelRef(item)).filter(Boolean))];
 }
 
 function buildBaseUrlCandidates(baseUrl: string): string[] {
@@ -272,6 +289,15 @@ function resolvePositiveInteger(value: string | number | undefined, fallback: nu
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function resolveNonNegativeInteger(value: string | number | undefined, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(value || "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function resolveTimeoutMs(value: string | number | undefined, fallback: number): number {
+  return resolveNonNegativeInteger(value, fallback);
+}
+
 function listCandidateModelRefs(
   catalog: OahWorkspaceCatalog,
   preferredModelRef: string | undefined,
@@ -280,12 +306,15 @@ function listCandidateModelRefs(
   const refs = catalog.models
     .map((entry) => normalizeModelRef(entry.ref))
     .filter(Boolean);
+  const configuredPriority = readConfiguredModelPriority();
 
-  if (!preferred) {
-    return [...new Set(refs)];
-  }
+  const orderedRefs = [
+    ...(preferred ? [preferred] : []),
+    ...configuredPriority,
+    ...refs,
+  ];
 
-  return [preferred, ...refs.filter((ref) => ref !== preferred)];
+  return [...new Set(orderedRefs.filter(Boolean))];
 }
 
 function isRetriableModelExecutionError(error: unknown): boolean {
@@ -294,10 +323,21 @@ function isRetriableModelExecutionError(error: unknown): boolean {
     text.includes("Cannot connect to API")
     || text.includes("getaddrinfo ENOTFOUND")
     || text.includes("EAI_AGAIN")
+    || text.includes("ECONNRESET")
+    || text.includes("socket hang up")
     || text.includes("fetch failed")
+    || text.includes("This operation was aborted")
+    || text.includes("OAH request timed out")
     || text.includes("upstream")
     || text.includes("status=failed")
+    || text.includes("status=timed_out")
+    || text.includes("Run exceeded configured timeout")
   );
+}
+
+function isRateLimitedModelExecutionError(error: unknown): boolean {
+  const text = describeFetchError(error);
+  return text.includes("Too Many Requests") || text.includes("429");
 }
 
 function formatAttemptedModels(models: string[]): string {
@@ -380,7 +420,8 @@ async function createWorkspace(options: OahSessionClientOptions): Promise<string
         ...(options.workspaceOwnerId ? { ownerId: options.workspaceOwnerId } : {}),
         ...(options.workspaceServiceName ? { serviceName: options.workspaceServiceName } : {}),
       }),
-    }
+    },
+    options.requestTimeoutMs,
   );
 
   return workspace.id;
@@ -406,11 +447,22 @@ async function requestOahJson<T>(
   baseUrl: string,
   apiPath: string,
   requestId: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  requestTimeoutMs?: number,
 ): Promise<T> {
   const errors: string[] = [];
   for (const candidateBaseUrl of buildBaseUrlCandidates(baseUrl)) {
     let response: globalThis.Response;
+    const timeoutMs = resolveTimeoutMs(
+      requestTimeoutMs ?? process.env.OAH_REQUEST_TIMEOUT_MS,
+      DEFAULT_OAH_REQUEST_TIMEOUT_MS,
+    );
+    const controller = timeoutMs > 0 ? new AbortController() : null;
+    const timeout = controller
+      ? setTimeout(() => {
+        controller.abort(new Error(`OAH request timed out after ${timeoutMs}ms`));
+      }, timeoutMs)
+      : null;
     try {
       response = await fetch(`${candidateBaseUrl}${apiPath}`, {
         ...init,
@@ -418,10 +470,15 @@ async function requestOahJson<T>(
           ...buildHeaders(requestId, init.body !== undefined),
           ...(init.headers ?? {}),
         },
+        signal: controller?.signal ?? init.signal,
       });
     } catch (error) {
       errors.push(`${candidateBaseUrl}: ${describeFetchError(error)}`);
       continue;
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
 
     const text = await response.text();
@@ -451,7 +508,8 @@ async function resolveWorkspaceId(options: OahSessionClientOptions): Promise<str
     options.baseUrl,
     `/api/v1/workspaces?${query.toString()}`,
     options.requestId,
-    { method: "GET" }
+    { method: "GET" },
+    options.requestTimeoutMs,
   );
 
   const candidates = page.items
@@ -481,36 +539,57 @@ async function resolveWorkspaceId(options: OahSessionClientOptions): Promise<str
   return createWorkspace(options);
 }
 
-async function getWorkspace(baseUrl: string, workspaceId: string, requestId: string): Promise<OahWorkspace> {
+async function getWorkspace(
+  baseUrl: string,
+  workspaceId: string,
+  requestId: string,
+  requestTimeoutMs?: number,
+): Promise<OahWorkspace> {
   return requestOahJson<OahWorkspace>(
     baseUrl,
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`,
     requestId,
-    { method: "GET" }
+    { method: "GET" },
+    requestTimeoutMs,
   );
 }
 
-async function getWorkspaceCatalog(baseUrl: string, workspaceId: string, requestId: string): Promise<OahWorkspaceCatalog> {
+async function getWorkspaceCatalog(
+  baseUrl: string,
+  workspaceId: string,
+  requestId: string,
+  requestTimeoutMs?: number,
+): Promise<OahWorkspaceCatalog> {
   return requestOahJson<OahWorkspaceCatalog>(
     baseUrl,
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/catalog`,
     requestId,
-    { method: "GET" }
+    { method: "GET" },
+    requestTimeoutMs,
   );
 }
 
-async function getHealthReport(baseUrl: string, requestId: string): Promise<OahHealthReport> {
+async function getHealthReport(
+  baseUrl: string,
+  requestId: string,
+  requestTimeoutMs?: number,
+): Promise<OahHealthReport> {
   return requestOahJson<OahHealthReport>(
     baseUrl,
     "/healthz",
     requestId,
-    { method: "GET" }
+    { method: "GET" },
+    requestTimeoutMs,
   );
 }
 
-async function getHealthReportBestEffort(baseUrl: string, requestId: string): Promise<OahHealthReport> {
+async function getHealthReportBestEffort(
+  baseUrl: string,
+  requestId: string,
+  requestTimeoutMs?: number,
+): Promise<OahHealthReport> {
   try {
-    return await getHealthReport(baseUrl, requestId);
+    return await getHealthReport(baseUrl, requestId, requestTimeoutMs);
   } catch {
     return { status: "unknown" };
   }
@@ -524,7 +603,74 @@ function isRunExecutionReady(health: OahHealthReport): boolean {
   if (!worker) {
     return true;
   }
-  return worker.acceptsNewRuns !== false;
+  if ((worker.mode || "").toLowerCase() === "disabled") {
+    return false;
+  }
+  if (worker.acceptsNewRuns === false) {
+    return false;
+  }
+
+  const processMode = readHealthText(health.process?.mode).toLowerCase();
+  const processExecution = readHealthText(health.process?.execution).toLowerCase();
+  const sandboxExecutionModel = readHealthText(health.sandbox?.executionModel).toLowerCase();
+  if (
+    (worker.mode || "").toLowerCase() === "embedded" ||
+    processMode.includes("embedded_worker") ||
+    processExecution === "local_inline" ||
+    sandboxExecutionModel === "local_embedded"
+  ) {
+    return true;
+  }
+
+  const summary = worker.summary;
+  const activeWorkerCount = Array.isArray(worker.activeWorkers) ? worker.activeWorkers.length : null;
+  if (!summary && activeWorkerCount === null) {
+    return true;
+  }
+
+  const healthyCount = Number(summary?.healthy ?? 0);
+  const activeCount = Number(summary?.active ?? 0);
+  const embeddedCount = Number(summary?.embedded ?? 0);
+  return healthyCount > 0 || activeCount > 0 || embeddedCount > 0 || (activeWorkerCount ?? 0) > 0;
+}
+
+function readHealthText(value: unknown, fallback = ""): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return fallback;
+}
+
+function describeRunExecutionReadiness(health: OahHealthReport): string {
+  const worker = health.worker;
+  if (!worker) {
+    return `health_status=${health.status}, worker=not_reported`;
+  }
+
+  const activeWorkerCount = Array.isArray(worker.activeWorkers) ? worker.activeWorkers.length : 0;
+  return [
+    `health_status=${health.status}`,
+    `process_mode=${readHealthText(health.process?.mode, "unknown")}`,
+    `execution=${readHealthText(health.process?.execution, "unknown")}`,
+    `worker_mode=${worker.mode || "unknown"}`,
+    `accepts_new_runs=${worker.acceptsNewRuns !== false}`,
+    `active_workers=${activeWorkerCount}`,
+    `healthy=${Number(worker.summary?.healthy ?? 0)}`,
+    `active=${Number(worker.summary?.active ?? 0)}`,
+    `embedded=${Number(worker.summary?.embedded ?? 0)}`,
+  ].join(", ");
+}
+
+function assertRunExecutionReady(health: OahHealthReport, workspaceId: string): void {
+  if (isRunExecutionReady(health)) {
+    return;
+  }
+  throw new Error(
+    `OAH no execution worker is available for runs. workspaceId=${workspaceId}; ${describeRunExecutionReadiness(health)}`,
+  );
 }
 
 async function createSession(workspaceId: string, options: OahSessionClientOptions): Promise<string> {
@@ -542,7 +688,8 @@ async function createSession(workspaceId: string, options: OahSessionClientOptio
     {
       method: "POST",
       body: JSON.stringify(body),
-    }
+    },
+    options.requestTimeoutMs,
   );
 
   return session.id;
@@ -570,7 +717,8 @@ async function submitMessage(sessionId: string, options: OahSessionRunOptions): 
         content: options.content,
         runningRunBehavior: "queue",
       }),
-    }
+    },
+    options.requestTimeoutMs,
   );
 }
 
@@ -585,19 +733,34 @@ async function waitForRunCompletion(runId: string, options: OahSessionRunOptions
     options.runPollIntervalMs ?? process.env.OAH_RUN_POLL_INTERVAL_MS,
     DEFAULT_OAH_RUN_POLL_INTERVAL_MS
   );
+  const timeoutMs = resolveTimeoutMs(
+    options.runTimeoutMs ?? process.env.OAH_RUN_TIMEOUT_MS,
+    DEFAULT_OAH_RUN_TIMEOUT_MS
+  );
+  const startedAt = Date.now();
+  let lastStatus = "unknown";
   while (true) {
     const run = await requestOahJson<OahRun>(
       options.baseUrl,
       `/api/v1/runs/${encodeURIComponent(runId)}`,
       options.requestId,
-      { method: "GET" }
+      { method: "GET" },
+      options.requestTimeoutMs,
     );
+    lastStatus = run.status;
 
     if (RUN_TERMINAL_STATUSES.has(run.status)) {
       return run;
     }
 
-    await sleep(pollIntervalMs);
+    const elapsedMs = Date.now() - startedAt;
+    if (timeoutMs > 0 && elapsedMs >= timeoutMs) {
+      throw new Error(
+        `Run exceeded configured timeout (${timeoutMs}ms). runId=${runId}, last_status=${lastStatus}`,
+      );
+    }
+
+    await sleep(timeoutMs > 0 ? Math.min(pollIntervalMs, Math.max(1, timeoutMs - elapsedMs)) : pollIntervalMs);
   }
 }
 
@@ -655,7 +818,8 @@ async function loadRunMessages(sessionId: string, options: OahSessionRunOptions)
     options.baseUrl,
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
     options.requestId,
-    { method: "GET" }
+    { method: "GET" },
+    options.requestTimeoutMs,
   );
 
   return page.items;
@@ -725,6 +889,35 @@ async function runOahSessionMessage(
   };
 }
 
+async function runOahSessionMessageWithRetry(
+  workspaceId: string,
+  sessionId: string,
+  options: OahSessionRunOptions,
+): Promise<OahSessionRunResult> {
+  const maxRetries = resolveNonNegativeInteger(
+    options.modelRetryAttempts ?? process.env.OAH_MODEL_RETRY_ATTEMPTS,
+    DEFAULT_OAH_MODEL_RETRY_ATTEMPTS,
+  );
+  const retryDelayMs = resolvePositiveInteger(
+    options.modelRetryDelayMs ?? process.env.OAH_MODEL_RETRY_DELAY_MS,
+    DEFAULT_OAH_MODEL_RETRY_DELAY_MS,
+  );
+
+  let attempt = 0;
+  while (true) {
+    try {
+      return await runOahSessionMessage(workspaceId, sessionId, options);
+    } catch (error) {
+      const retriable = isRateLimitedModelExecutionError(error) || isRetriableModelExecutionError(error);
+      if (!retriable || attempt >= maxRetries) {
+        throw error;
+      }
+      attempt += 1;
+      await sleep(retryDelayMs * attempt);
+    }
+  }
+}
+
 async function runSessionMessageWithModelFallback(
   workspaceId: string,
   sessionId: string,
@@ -736,7 +929,7 @@ async function runSessionMessageWithModelFallback(
   const primaryModelRef = normalizeModelRef(options.modelRef);
 
   try {
-    const initialResult = await runOahSessionMessage(workspaceId, sessionId, {
+    const initialResult = await runOahSessionMessageWithRetry(workspaceId, sessionId, {
       ...options,
       content,
     });
@@ -745,7 +938,8 @@ async function runSessionMessageWithModelFallback(
       sessionId: initialResult.sessionId,
     };
   } catch (error) {
-    if (!isModelFallbackEnabled() || !isRetriableModelExecutionError(error)) {
+    const fallbackEnabled = options.modelFallbackEnabled ?? isModelFallbackEnabled();
+    if (!fallbackEnabled || !isRetriableModelExecutionError(error)) {
       throw error;
     }
     if (primaryModelRef) {
@@ -760,7 +954,7 @@ async function runSessionMessageWithModelFallback(
       attemptedModels.push(fallbackModelRef);
       const fallbackSessionId = await createSessionForModel(workspaceId, options, fallbackModelRef);
       try {
-        return await runOahSessionMessage(workspaceId, fallbackSessionId, {
+        return await runOahSessionMessageWithRetry(workspaceId, fallbackSessionId, {
           ...options,
           modelRef: fallbackModelRef,
           content,
@@ -788,8 +982,12 @@ export async function createOahSessionClient(options: OahSessionClientOptions): 
   };
 
   const workspaceId = await resolveWorkspaceId(normalizedOptions);
+  const [catalog, health] = await Promise.all([
+    getWorkspaceCatalog(baseUrl, workspaceId, normalizedOptions.requestId, normalizedOptions.requestTimeoutMs),
+    getHealthReportBestEffort(baseUrl, normalizedOptions.requestId, normalizedOptions.requestTimeoutMs),
+  ]);
+  assertRunExecutionReady(health, workspaceId);
   const sessionId = await createSession(workspaceId, normalizedOptions);
-  const catalog = await getWorkspaceCatalog(baseUrl, workspaceId, normalizedOptions.requestId);
   let activeSessionId = sessionId;
   return {
     workspaceId,
@@ -827,7 +1025,11 @@ export function createOahSessionClientForExistingSession(
     sessionId,
     agentName: normalizedOptions.activeSessionAgentName || normalizedOptions.agentName,
     send: async (content: OahUserMessageContent) => {
-      const catalog = await getWorkspaceCatalog(baseUrl, workspaceId, normalizedOptions.requestId);
+      const [catalog, health] = await Promise.all([
+        getWorkspaceCatalog(baseUrl, workspaceId, normalizedOptions.requestId, normalizedOptions.requestTimeoutMs),
+        getHealthReportBestEffort(baseUrl, normalizedOptions.requestId, normalizedOptions.requestTimeoutMs),
+      ]);
+      assertRunExecutionReady(health, workspaceId);
       return runSessionMessageWithModelFallback(
         workspaceId,
         sessionId,
@@ -852,9 +1054,9 @@ export async function resolveOahWorkspace(options: OahSessionRunOptions): Promis
   };
   const workspaceId = await resolveWorkspaceId(normalizedOptions);
   const [workspace, catalog, health] = await Promise.all([
-    getWorkspace(baseUrl, workspaceId, options.requestId),
-    getWorkspaceCatalog(baseUrl, workspaceId, options.requestId),
-    getHealthReportBestEffort(baseUrl, options.requestId),
+    getWorkspace(baseUrl, workspaceId, options.requestId, normalizedOptions.requestTimeoutMs),
+    getWorkspaceCatalog(baseUrl, workspaceId, options.requestId, normalizedOptions.requestTimeoutMs),
+    getHealthReportBestEffort(baseUrl, options.requestId, normalizedOptions.requestTimeoutMs),
   ]);
   return {
     workspaceId,

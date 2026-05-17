@@ -33,9 +33,10 @@ TypeScript services and OAH agent prompts must align to this file instead of mai
   "runtime_candidates": [
     "question-tutor",
     "tutor-question-generation",
-    "edunex-integrated"
+    "eduqg-integrated"
   ],
   "human_controlled_fields": [
+    "subject",
     "knowledge_point",
     "difficulty",
     "question_type",
@@ -51,6 +52,11 @@ TypeScript services and OAH agent prompts must align to this file instead of mai
     "suggested_profile_updates"
   ],
   "explicit_confirmation_requirements": [
+    {
+      "field": "subject",
+      "when": "always",
+      "message": "Teacher must explicitly confirm subject before generation."
+    },
     {
       "field": "knowledge_point",
       "when": "always",
@@ -170,6 +176,6 @@ The runtime uses a main-orchestrator / subagent architecture:
 - `visual-question-evaluator` evaluates image questions, image relevance, and Manim render safety.
 - `student-simulator` and `profile-evolution` provide optional personalization/profile signals.
 
-Human-controlled fields must come from the teacher/business request, not from AI: knowledge point, difficulty, question type, content mode, algorithm, and image requirement.
+Human-controlled fields must come from the teacher/business request, not from AI: subject, knowledge point, difficulty, question type, content mode, algorithm, and image requirement.
 
 The service calling this runtime is responsible for final API validation, rendering, persistence, and request logging.

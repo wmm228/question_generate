@@ -34,6 +34,7 @@ export class BaseAgent {
   }> {
     const startedAt = Date.now();
     const result = await runAlgorithm({
+      subject: this.needs,
       knowledge_point: this.needs,
       difficulty: "3",
       algorithm: this.algorithmName,

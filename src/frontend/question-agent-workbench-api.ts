@@ -3,10 +3,12 @@ import type {
   GeneratedResult,
   MeEnvelope,
   OahStatusEnvelope,
+  PortraitAttachment,
   PortraitDocumentEnvelope,
   PortraitListEnvelope,
   PortraitTurnEnvelope,
   ProgressSnapshot,
+  QuestionLibraryEnvelope,
   QuestionAgentContractEnvelope,
   SpecNormalizeResponse,
   WorkbenchClientConfig,
@@ -33,11 +35,11 @@ export class WorkbenchApi {
     }, false);
   }
 
-  async register(uid: string, password: string): Promise<AuthResponse> {
+  async register(uid: string, password: string, email: string): Promise<AuthResponse> {
     return this.requestJson<AuthResponse>("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid, password }),
+      body: JSON.stringify({ uid, password, email, displayName: uid }),
     }, false);
   }
 
@@ -72,22 +74,70 @@ export class WorkbenchApi {
     );
   }
 
-  async startPortrait(message: string): Promise<PortraitTurnEnvelope> {
+  async archivePortrait(portraitId: string): Promise<{ archived: boolean; portrait_id: string }> {
+    return this.requestJson<{ archived: boolean; portrait_id: string }>(
+      `/api/ai-question/portrait/${encodeURIComponent(portraitId)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async startPortrait(message: string, attachments: PortraitAttachment[] = []): Promise<PortraitTurnEnvelope> {
     return this.requestJson<PortraitTurnEnvelope>("/api/ai-question/portrait/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, attachments }),
     });
   }
 
-  async replyPortrait(portraitId: string, message: string): Promise<PortraitTurnEnvelope> {
+  async replyPortrait(
+    portraitId: string,
+    message: string,
+    attachments: PortraitAttachment[] = [],
+  ): Promise<PortraitTurnEnvelope> {
     return this.requestJson<PortraitTurnEnvelope>(
       `/api/ai-question/portrait/${encodeURIComponent(portraitId)}/reply`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, attachments }),
       },
+    );
+  }
+
+  async appendPortraitHistory(
+    portraitId: string,
+    message: {
+      role: string;
+      content: string;
+      kind?: string;
+      request_id?: string;
+      payload?: unknown;
+    },
+  ): Promise<{ portrait?: PortraitDocumentEnvelope }> {
+    return this.requestJson<{ portrait?: PortraitDocumentEnvelope }>(
+      `/api/ai-question/portrait/${encodeURIComponent(portraitId)}/history`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      },
+    );
+  }
+
+  async commitPortraitSpec(
+    portraitId: string,
+    payload: Record<string, unknown>,
+    requestId: string,
+  ): Promise<{ portrait?: PortraitDocumentEnvelope; spec?: SpecNormalizeResponse["spec"]; plan?: SpecNormalizeResponse["plan"] }> {
+    return this.requestJson(
+      `/api/ai-question/portrait/${encodeURIComponent(portraitId)}/spec`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, request_uuid: requestId }),
+      },
+      true,
+      requestId,
     );
   }
 
@@ -107,11 +157,75 @@ export class WorkbenchApi {
     }, true, requestId);
   }
 
+  async submitQuestionFeedback(payload: {
+    request_id: string;
+    portrait_id?: string;
+    score: number;
+    question?: GeneratedResult | null;
+    context?: Record<string, unknown>;
+  }): Promise<{ ok?: boolean }> {
+    return this.requestJson<{ ok?: boolean }>("/api/ai-question/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async searchQuestionLibrary(filters: Record<string, string>): Promise<QuestionLibraryEnvelope> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      const normalized = normalizeString(value);
+      if (normalized) {
+        query.set(key, normalized);
+      }
+    }
+    return this.requestJson<QuestionLibraryEnvelope>(
+      `/api/ai-question/library/questions?${query.toString()}`,
+      { method: "GET" },
+    );
+  }
+
   async getProgress(requestId: string): Promise<ProgressSnapshot> {
     return this.requestJson<ProgressSnapshot>(
       `/api/ai-question/status/${encodeURIComponent(requestId)}`,
       { method: "GET" },
     );
+  }
+
+  async downloadPortraitExport(portraitId: string, format: string): Promise<Blob> {
+    const headers = new Headers();
+    if (this.sessionToken) {
+      headers.set("x-session-token", this.sessionToken);
+    }
+    const response = await fetch(
+      `/api/ai-question/portrait/${encodeURIComponent(portraitId)}/export?format=${encodeURIComponent(format)}`,
+      { method: "GET", headers },
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new ApiRequestError(text || `导出失败，状态码 ${response.status}`, response.status, text);
+    }
+    return response.blob();
+  }
+
+  async downloadQuestionExport(portraitId: string, requestId: string, format: string): Promise<Blob> {
+    const headers = new Headers();
+    if (this.sessionToken) {
+      headers.set("x-session-token", this.sessionToken);
+    }
+    const query = new URLSearchParams({
+      format,
+      ...(requestId ? { request_id: requestId } : {}),
+    });
+    const response = await fetch(
+      `/api/ai-question/portrait/${encodeURIComponent(portraitId)}/question-export?${query.toString()}`,
+      { method: "GET", headers },
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new ApiRequestError(text || `题目导出失败，状态码 ${response.status}`, response.status, text);
+    }
+    return response.blob();
   }
 
   private async requestJson<T>(

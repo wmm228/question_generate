@@ -1,6 +1,6 @@
-import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { createHash } from "crypto";
 
 import {
   type AiGenerateResponse,
@@ -12,13 +12,10 @@ import {
   type AiGenPayload,
 } from "../../src/types/ai-generate";
 import { logEvent } from "../../src/utils/request";
-import { getAiGeneratorsConfig } from "../config";
 
 const OPTION_KEYS = ["A", "B", "C", "D"] as const;
-const DEFAULT_IMAGE_IRT_MODEL = getAiGeneratorsConfig().model || "platform/kimi-k25";
-const DEFAULT_MANIM_COMMAND = "manim";
-const DEFAULT_SCENE_NAME = "QuestionScene";
 const OUTPUT_ROOT = path.resolve(process.cwd(), "output", "ai-generated-visuals");
+const MAX_SVG_BYTES = 200_000;
 
 type OptionKey = (typeof OPTION_KEYS)[number];
 
@@ -26,121 +23,78 @@ export interface ImageQuestionRenderInput {
   payload: AiGenPayload;
   requestId: string;
   imagePosition: AiGenImagePlacementOrEmpty;
-  sceneName: string;
-  imageCode: string;
+  imageSvg: string;
 }
 
-interface ImageIrtConfig {
-  provider: "oah";
-  method: "irt";
-  model: string;
-  input_mode: "multimodal";
-  enabled: boolean;
-}
-
-interface ManimRenderResult {
+interface SvgRenderResult {
   imageUrl: string;
   imagePath: string;
-  sceneCodePath: string;
-  mediaDir: string;
-  renderCommand: string[];
-  renderStdout: string;
-  renderStderr: string;
 }
 
 function safeRequestSegment(value: string): string {
-  const sanitized = value.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 96);
-  return sanitized || `${Date.now()}`;
-}
-
-function normalizeSceneName(value: string): string {
-  const trimmed = value.trim();
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed) ? trimmed : DEFAULT_SCENE_NAME;
-}
-
-function getManimCommand(): string {
-  return (process.env.MANIM_COMMAND || process.env.OAH_MANIM_COMMAND || DEFAULT_MANIM_COMMAND).trim();
-}
-
-function getImageIrtConfig(): ImageIrtConfig {
-  return {
-    provider: "oah",
-    method: "irt",
-    model: (process.env.OAH_IMAGE_IRT_MODEL_NAME || DEFAULT_IMAGE_IRT_MODEL).trim(),
-    input_mode: "multimodal",
-    enabled: (process.env.OAH_IMAGE_IRT_ENABLED || "false").trim().toLowerCase() === "true",
-  };
+  const sanitized = value.replace(/[^A-Za-z0-9._:-]/g, "_");
+  if (!sanitized) {
+    return `${Date.now()}`;
+  }
+  if (sanitized.length <= 96) {
+    return sanitized;
+  }
+  const digest = createHash("sha256").update(value).digest("hex").slice(0, 16);
+  return `${sanitized.slice(0, 79)}-${digest}`;
 }
 
 function buildImageUrl(imagePath: string): string {
-  const imageBytes = fs.readFileSync(imagePath);
-  return `data:image/png;base64,${imageBytes.toString("base64")}`;
+  const relativePath = path.relative(process.cwd(), imagePath);
+  const encodedPath = relativePath
+    .split(path.sep)
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `/${encodedPath}`;
 }
 
-function findRenderedPng(mediaDir: string, sceneName: string): string | null {
-  if (!fs.existsSync(mediaDir)) {
-    return null;
-  }
-
-  const candidates: string[] = [];
-  const visit = (directory: string): void => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const fullPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        visit(fullPath);
-        continue;
-      }
-      if (entry.isFile() && entry.name.toLowerCase().endsWith(".png")) {
-        candidates.push(fullPath);
-      }
-    }
-  };
-  visit(mediaDir);
-
-  const exact = candidates.find((candidate) => path.basename(candidate) === `${sceneName}.png`);
-  return exact || candidates.sort((left, right) => left.length - right.length)[0] || null;
+function stripSvgFence(value: string): string {
+  const trimmed = value.trim();
+  const fenced = trimmed.match(/^```(?:svg|xml)?\s*([\s\S]*?)\s*```$/i);
+  return fenced ? fenced[1].trim() : trimmed;
 }
 
-function validateImageCode(sceneName: string, imageCode: string): void {
-  if (!imageCode.trim()) {
-    throw new Error("Image question is missing image_code");
+function validateAndNormalizeSvg(value: string): string {
+  let svg = stripSvgFence(value);
+  const svgStart = svg.search(/<svg[\s>]/i);
+  if (svgStart < 0) {
+    throw new Error("Image question is missing image_svg");
   }
-  if (!imageCode.includes("from manim import")) {
-    throw new Error("image_code must import from manim");
+  svg = svg.slice(svgStart).trim();
+  const svgEnd = svg.toLowerCase().lastIndexOf("</svg>");
+  if (svgEnd < 0) {
+    throw new Error("image_svg must be a complete SVG document");
   }
-  if (!imageCode.includes(`class ${sceneName}(`)) {
-    throw new Error(`image_code must define class ${sceneName}`);
-  }
-}
+  svg = svg.slice(0, svgEnd + "</svg>".length).trim();
 
-function runCommand(command: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      windowsHide: true,
-    });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
+  if (Buffer.byteLength(svg, "utf-8") > MAX_SVG_BYTES) {
+    throw new Error("image_svg is too large");
+  }
+  if (!/^<svg[\s>]/i.test(svg)) {
+    throw new Error("image_svg must start with an <svg> root element");
+  }
+  if (/<\s*!doctype|<\s*!entity|<\?xml-stylesheet/i.test(svg)) {
+    throw new Error("image_svg must not include external document declarations");
+  }
+  if (/<\s*\/?\s*(?:script|foreignObject|iframe|object|embed|audio|video|image|link|meta|style|animate|set)\b/i.test(svg)) {
+    throw new Error("image_svg contains an unsupported SVG element");
+  }
+  if (/\s(?:on[a-z]+|href|xlink:href|src)\s*=/i.test(svg)) {
+    throw new Error("image_svg contains an unsafe attribute");
+  }
+  if (/javascript:|data:text\/html|url\s*\(/i.test(svg)) {
+    throw new Error("image_svg contains an unsafe reference");
+  }
 
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-    });
-    child.on("error", (error) => {
-      reject(error);
-    });
-    child.on("close", (code) => {
-      const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
-      const stderr = Buffer.concat(stderrChunks).toString("utf-8");
-      if (code !== 0) {
-        reject(new Error(`Manim render failed with exit code ${code}.\nSTDOUT:\n${stdout}\n\nSTDERR:\n${stderr}`));
-        return;
-      }
-      resolve({ stdout, stderr });
-    });
-  });
+  if (!/^<svg\b[^>]*\sxmlns=/i.test(svg)) {
+    svg = svg.replace(/^<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+  return svg;
 }
 
 export function normalizeImagePosition(
@@ -175,59 +129,22 @@ export function placementToImageTargets(imagePosition: AiGenImagePlacementOrEmpt
   return [];
 }
 
-export async function renderManimImageForQuestion(input: ImageQuestionRenderInput): Promise<Record<string, unknown>> {
-  const sceneName = normalizeSceneName(input.sceneName);
-  validateImageCode(sceneName, input.imageCode);
-
+export async function renderSvgImageForQuestion(input: ImageQuestionRenderInput): Promise<Record<string, unknown>> {
+  const imageSvg = validateAndNormalizeSvg(input.imageSvg);
   const outputDir = path.join(OUTPUT_ROOT, safeRequestSegment(input.requestId));
-  const sceneCodePath = path.join(outputDir, "question_scene.py");
-  const imagePath = path.join(outputDir, "question.png");
-  const mediaDir = path.join(outputDir, "manim_media");
-  fs.mkdirSync(outputDir, { recursive: true });
-  fs.writeFileSync(sceneCodePath, input.imageCode, "utf-8");
-  if (fs.existsSync(imagePath)) {
-    fs.unlinkSync(imagePath);
-  }
+  const imagePath = path.join(outputDir, "question.svg");
+  await fs.promises.mkdir(outputDir, { recursive: true });
+  await fs.promises.writeFile(imagePath, imageSvg, "utf-8");
 
-  const renderCommand = [
-    "-qk",
-    "-s",
-    sceneCodePath,
-    sceneName,
-    "--media_dir",
-    mediaDir,
-  ];
-
-  logEvent("info", null, "ai_generate.visual.manim.request", {
-    request_uuid: input.requestId,
-    renderer: "manim",
-    scene_name: sceneName,
-    scene_code_path: sceneCodePath,
-    command: [getManimCommand(), ...renderCommand],
-  });
-
-  const completed = await runCommand(getManimCommand(), renderCommand, outputDir);
-  const renderedPng = findRenderedPng(mediaDir, sceneName);
-  if (!renderedPng) {
-    throw new Error(`Manim render completed but no PNG was found under ${mediaDir}`);
-  }
-  fs.copyFileSync(renderedPng, imagePath);
-
-  const renderResult: ManimRenderResult = {
+  const renderResult: SvgRenderResult = {
     imageUrl: buildImageUrl(imagePath),
     imagePath,
-    sceneCodePath,
-    mediaDir,
-    renderCommand: [getManimCommand(), ...renderCommand],
-    renderStdout: completed.stdout,
-    renderStderr: completed.stderr,
   };
 
-  logEvent("info", null, "ai_generate.visual.manim.responded", {
+  logEvent("info", null, "ai_generate.visual.svg.responded", {
     request_uuid: input.requestId,
-    renderer: "manim",
+    renderer: "safe_svg",
     image_path: renderResult.imagePath,
-    scene_code_path: renderResult.sceneCodePath,
   });
 
   const stemImage = input.imagePosition === "stem_image" ? renderResult.imageUrl : null;
@@ -243,19 +160,14 @@ export async function renderManimImageForQuestion(input: ImageQuestionRenderInpu
     image_mode: input.payload.image_mode,
     image_targets: placementToImageTargets(input.imagePosition),
     status: "completed",
-    provider: "oah_manim",
+    provider: "safe_svg",
     stage: "rendered",
     algorithm: input.payload.algorithm,
     difficulty: input.payload.difficulty,
-    renderer: "manim_static_png",
+    renderer: "safe_svg",
     image_position: input.imagePosition,
-    image_code: input.imageCode,
-    scene_name: sceneName,
-    scene_code_path: renderResult.sceneCodePath,
-    image_path: renderResult.imagePath,
-    media_dir: renderResult.mediaDir,
-    render_command: renderResult.renderCommand,
-    image_irt: getImageIrtConfig(),
+    image_svg_path: renderResult.imagePath,
+    image_url: renderResult.imageUrl,
   };
 
   return {
@@ -273,13 +185,13 @@ export function buildFailedVisualResponse(payload: AiGenPayload, imagePosition: 
     image_mode: payload.image_mode,
     image_targets: placementToImageTargets(imagePosition),
     status: "failed",
-    provider: "oah_manim",
+    provider: "safe_svg",
     stage: "failed",
     algorithm: payload.algorithm,
     difficulty: payload.difficulty,
-    renderer: "manim_static_png",
+    renderer: "safe_svg",
     image_position: imagePosition,
-    image_irt: getImageIrtConfig(),
+    error: reason,
   };
 
   return {

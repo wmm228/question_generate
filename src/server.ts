@@ -7,11 +7,12 @@ import { createTutorApp, type TutorApp } from "./services/tutor-app";
 const STARTUP_ID = `${Date.now()}-${process.pid}`;
 
 async function main(): Promise<void> {
-  const launchProfile = applyTutorLaunchProfile(process.env.TUTOR_START_PROFILE);
   const paths = resolveTutorServerPaths({
     currentWorkingDirectory: process.cwd(),
     runtimeDirectory: __dirname,
   });
+  loadTutorServerEnvironment(paths.envPath);
+  const launchProfile = applyTutorLaunchProfile(process.env.TUTOR_START_PROFILE);
   const environment = loadTutorServerEnvironment(paths.envPath);
   const runtime = createServerRuntime();
   const tutorApp = await createTutorApp({

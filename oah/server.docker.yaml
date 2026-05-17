@@ -1,0 +1,30 @@
+server:
+  host: 0.0.0.0
+  port: 8787
+
+storage: {}
+
+paths:
+  workspace_dir: /data/workspaces
+  runtime_state_dir: /data/runtime-state
+  runtime_dir: /data/runtimes
+  model_dir: /data/models
+  tool_dir: /data/tools
+  skill_dir: /data/skills
+
+workers:
+  embedded:
+    min_count: 1
+    max_count: 2
+    scale_interval_ms: 1000
+    idle_ttl_ms: 30000
+    scale_up_window: 1
+    scale_down_window: 2
+    cooldown_ms: 1000
+    reserved_capacity_for_subagent: 0
+
+sandbox:
+  provider: embedded
+
+llm:
+  default_model: kimi-k26

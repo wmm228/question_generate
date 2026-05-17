@@ -1,4 +1,34 @@
 services:
+  oah:
+    build:
+      context: ../OpenAgentHarness-master
+      dockerfile: Dockerfile.dev
+    image: oah-dev:latest
+    restart: unless-stopped
+    environment:
+      OAH_NATIVE_WORKSPACE_SYNC: "0"
+      OAH_NATIVE_WORKSPACE_SYNC_PERSISTENT: "0"
+    volumes:
+      - ./oah/server.docker.yaml:/config/server.docker.yaml:ro
+      - ../oah_260421_v2/test_oah_server/source/models:/data/models:ro
+      - ../oah_260421_v2/test_oah_server/source/runtimes:/data/runtimes:ro
+      - ../oah_260421_v2/test_oah_server/source/tools:/data/tools:ro
+      - ../oah_260421_v2/test_oah_server/source/skills:/data/skills:ro
+      - oah_runtime_state:/data/runtime-state
+      - oah_workspace_data:/data/workspaces
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   tutor:
     build:
       context: .
@@ -7,10 +37,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+      - path: .env.docker.local
+        required: false
     environment:
       NODE_ENV: production
       TUTOR_PORT: ${TUTOR_PORT:-7896}
-      TUTOR_STORAGE_BACKEND: ${TUTOR_STORAGE_BACKEND:-postgres}
     ports:
       - "${TUTOR_PORT:-7896}:7896"
     volumes:
@@ -18,18 +49,35 @@ services:
       - tutor_logs:/app/logs
       - tutor_output:/app/output
     depends_on:
+      oah:
+        condition: service_healthy
       postgres:
         condition: service_healthy
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles:
+      - cloudflare
+    env_file:
+      - .env.docker
+      - path: .env.docker.local
+        required: false
+    volumes:
+      - ./cloudflared/config.yml:/cloudflared-config/config.yml:ro
+      - ${CLOUDFLARED_DIR:-C:/Users/HP/.cloudflared}:/etc/cloudflared:ro
+    command: tunnel --config /cloudflared-config/config.yml --no-autoupdate run ${CLOUDFLARED_TUNNEL_ID}
+    depends_on:
+      tutor:
+        condition: service_started
 
   postgres:
     image: postgres:16
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-tutor}
-      POSTGRES_USER: ${POSTGRES_USER:-tutor}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    env_file:
+      - .env.docker
+      - path: .env.docker.local
+        required: true
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -40,6 +88,8 @@ services:
       start_period: 10s
 
 volumes:
+  oah_runtime_state:
+  oah_workspace_data:
   postgres_data:
   tutor_runtime_state:
   tutor_logs:

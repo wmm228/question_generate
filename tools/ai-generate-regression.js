@@ -99,15 +99,50 @@ function parseEvaluationPayload(content) {
   if (typeof parsed.passed !== "boolean") {
     throw new Error("invalid passed flag");
   }
+  const qualityGate = isRecord(parsed.quality_gate) ? parsed.quality_gate : {};
+  if ("passed" in qualityGate && typeof qualityGate.passed !== "boolean") {
+    throw new Error("invalid passed flag");
+  }
+  const qualityGatePassed = typeof qualityGate.passed === "boolean" ? qualityGate.passed : true;
+  const passed = parsed.passed && qualityGatePassed;
+  const qualityGateIssues = normalizeStringArray(qualityGate.issues);
   const issues = normalizeStringArray(parsed.issues);
   const revisionInstructions = normalizeString(parsed.revision_instructions);
-  if (!parsed.passed && !revisionInstructions && issues.length === 0) {
+  const allIssues = Array.from(new Set([
+    ...qualityGateIssues,
+    ...(!qualityGatePassed && qualityGateIssues.length === 0 ? ["quality_gate failed without issues"] : []),
+    ...issues,
+  ]));
+  if (!passed && !revisionInstructions && allIssues.length === 0) {
     throw new Error("missing actionable revision instructions");
   }
   return {
-    passed: parsed.passed,
-    issues,
-    revision_instructions: revisionInstructions || issues.join("; "),
+    passed,
+    issues: allIssues,
+    revision_instructions: revisionInstructions || allIssues.join("; "),
+  };
+}
+
+function stripMultipleChoiceOptionLabel(option) {
+  return option.replace(/^[A-D]\s*[.、:：)]\s*/i, "").trim();
+}
+
+function extractMultipleChoiceParts(question) {
+  const lines = question.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const optionPattern = /^([A-D])\s*[.、:：)]\s*(.*)$/;
+  const optionEntries = lines
+    .map((line) => {
+      const match = line.match(optionPattern);
+      return match ? { key: match[1], text: stripMultipleChoiceOptionLabel(match[2].trim() || line) } : null;
+    })
+    .filter((entry) => entry !== null);
+  const options = ["A", "B", "C", "D"]
+    .filter((key) => optionEntries.some((entry) => entry.key === key))
+    .map((key) => optionEntries.find((entry) => entry.key === key).text || "");
+  const questionLines = lines.filter((line) => !optionPattern.test(line));
+  return {
+    question: options.length > 0 ? questionLines.join("\n").trim() : question.trim(),
+    options,
   };
 }
 
@@ -157,6 +192,14 @@ function run() {
   }
   assertEqual("evalFix revision", evalFix.revision_instructions, "need image");
 
+  const qualityGateBlock = parseEvaluationPayload(
+    '{"passed":true,"quality_gate":{"passed":false,"issues":["answer not unique"]},"issues":[],"revision_instructions":""}',
+  );
+  if (qualityGateBlock.passed !== false) {
+    throw new Error("quality_gate.passed=false should block a passed evaluation");
+  }
+  assertEqual("qualityGateBlock revision", qualityGateBlock.revision_instructions, "answer not unique");
+
   let failed = false;
   try {
     parseEvaluationPayload('{"passed":"yes","issues":[],"revision_instructions":""}');
@@ -166,6 +209,11 @@ function run() {
   if (!failed) {
     throw new Error("invalid passed flag case should fail");
   }
+
+  const multipleChoice = extractMultipleChoiceParts("下列说法正确的是？\nA. 选项一\nB、选项二\nC: 选项三\nD) 选项四");
+  assertEqual("multipleChoice question", multipleChoice.question, "下列说法正确的是？");
+  assertEqual("multipleChoice option A", multipleChoice.options[0], "选项一");
+  assertEqual("multipleChoice option D", multipleChoice.options[3], "选项四");
 
   const promptDir = path.resolve(process.cwd(), "src/prompts/question-agents");
   for (const file of ["direct-generator.md", "direct-evaluator.md", "direct-revision.md"]) {
@@ -187,15 +235,20 @@ function run() {
     "react-revision.md",
     "dear.md",
     "dear-decompose.md",
+    "dear-analyze.md",
     "dear-draft.md",
     "dear-rethink.md",
     "eqpr.md",
     "eqpr-design.md",
     "eqpr-draft.md",
+    "eqpr-generation.md",
     "eqpr-process.md",
     "eqpr-refine.md",
+    "eqpr-reflection.md",
+    "eqpr-score.md",
     "evoq.md",
     "evoq-seed.md",
+    "evoq-crossover.md",
     "evoq-ranker.md",
     "evoq-mutate.md",
   ]) {

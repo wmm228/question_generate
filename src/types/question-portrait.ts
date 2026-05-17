@@ -16,13 +16,17 @@ import type {
 
 export type QuestionPortraitStatus = "draft" | "ready";
 export type QuestionPortraitRole = "teacher" | "assistant";
+export type QuestionPortraitMessageKind = "text" | "generated_question" | "notice" | "error";
+export type QuestionPortraitTeacherIntent = "continue_portrait" | "generate_question";
 export type QuestionPortraitPendingField =
+  | "subject"
   | QuestionControlledFieldKey
   | "teacher_profile"
   | "student_profile"
   | "none";
 
 export interface QuestionPortraitDraft {
+  subject: string;
   knowledge_point: string;
   difficulty: string;
   algorithm: AiGenAlgorithm | "";
@@ -39,6 +43,17 @@ export interface QuestionPortraitMessage {
   role: QuestionPortraitRole;
   content: string;
   created_at: string;
+  kind?: QuestionPortraitMessageKind;
+  request_id?: string;
+  payload?: unknown;
+}
+
+export interface QuestionPortraitAttachment {
+  id: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  data_url: string;
 }
 
 export interface QuestionPortraitRemoteSession {
@@ -72,9 +87,11 @@ export interface QuestionPortraitDocument {
   markdown_path: string | null;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
 }
 
 export interface QuestionPortraitTurnResult {
   portrait: QuestionPortraitDocument;
   assistant_message: string;
+  teacher_intent: QuestionPortraitTeacherIntent;
 }

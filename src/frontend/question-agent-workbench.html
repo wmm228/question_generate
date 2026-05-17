@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tutor AI 出题工作台</title>
-<link rel="stylesheet" href="/static/question-agent-workbench.css?v=20260509-chat-flow">
+<title>EduQG</title>
+<link rel="stylesheet" href="/static/question-agent-workbench.css?v=20260517-library-search-db">
 <script>
   MathJax = {
     tex: {
@@ -17,45 +17,176 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
-<script type="module" src="/static/generated/question-agent-workbench.js?v=20260509-chat-flow"></script>
+<script type="module" src="/static/generated/question-agent-workbench.js?v=20260517-library-search-db"></script>
 </head>
 <body>
+<div id="login-mask" class="auth-overlay" aria-hidden="true">
+  <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="auth-panel-title">
+    <div class="auth-brand">
+      <div class="brand-mark auth-brand-mark">Q</div>
+      <span>EduQG</span>
+      <strong id="auth-panel-title">登录</strong>
+    </div>
+    <div class="auth-tabs" role="tablist" aria-label="登录注册">
+      <button id="tab-login" class="auth-tab active" type="button">登录</button>
+      <button id="tab-register" class="auth-tab" type="button">注册</button>
+    </div>
+    <label class="auth-field">
+      <span>用户名 / 登录名</span>
+      <div class="auth-input-control">
+        <span class="auth-input-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="8" r="3.2"></circle>
+            <path d="M5.8 19.2a6.4 6.4 0 0 1 12.4 0"></path>
+            <circle cx="12" cy="12" r="9"></circle>
+          </svg>
+        </span>
+        <input id="auth-uid" type="text" autocomplete="username" placeholder="用户名或登录名">
+      </div>
+    </label>
+    <label class="auth-field auth-register-field" id="auth-email-field">
+      <span>邮箱</span>
+      <div class="auth-input-control">
+        <span class="auth-input-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="4" y="6" width="16" height="12" rx="2"></rect>
+            <path d="m5 8 7 5 7-5"></path>
+          </svg>
+        </span>
+        <input id="auth-email" type="email" autocomplete="email" placeholder="用于注册和找回账号">
+      </div>
+    </label>
+    <label class="auth-field">
+      <span>密码</span>
+      <div class="auth-input-control auth-password-control">
+        <span class="auth-input-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+          </svg>
+        </span>
+        <input id="auth-pwd" type="password" autocomplete="current-password" placeholder="至少 8 位，含大小写字母、数字和符号">
+        <button id="auth-pwd-toggle" class="auth-password-toggle" type="button" aria-label="显示密码" aria-pressed="false" title="显示密码">
+          <svg class="eye-icon eye-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <svg class="eye-icon eye-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 3 21 21"></path>
+            <path d="M10.6 5.2A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-3.1 4"></path>
+            <path d="M6.2 6.8C3.8 8.5 2.5 12 2.5 12s3.5 7 9.5 7a9.8 9.8 0 0 0 4.2-.9"></path>
+            <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path>
+          </svg>
+        </button>
+      </div>
+    </label>
+    <label class="auth-field auth-confirm-field" id="auth-confirm-field">
+      <span>确认密码</span>
+      <div class="auth-input-control auth-password-control">
+        <span class="auth-input-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+          </svg>
+        </span>
+        <input id="auth-confirm-pwd" type="password" autocomplete="new-password" placeholder="确认密码">
+        <button id="auth-confirm-pwd-toggle" class="auth-password-toggle" type="button" aria-label="显示确认密码" aria-pressed="false" title="显示确认密码">
+          <svg class="eye-icon eye-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <svg class="eye-icon eye-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 3 21 21"></path>
+            <path d="M10.6 5.2A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-3.1 4"></path>
+            <path d="M6.2 6.8C3.8 8.5 2.5 12 2.5 12s3.5 7 9.5 7a9.8 9.8 0 0 0 4.2-.9"></path>
+            <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path>
+          </svg>
+        </button>
+      </div>
+    </label>
+    <div class="auth-row">
+      <label class="auth-check">
+        <input type="checkbox" checked>
+        <span>保持登录</span>
+      </label>
+      <button id="auth-switch-link" class="auth-link" type="button">立即注册</button>
+    </div>
+    <div id="auth-error" role="alert"></div>
+    <button id="auth-submit" class="auth-submit" type="button"><span id="auth-btn-text">登 录</span></button>
+    <div class="auth-footer">登录注册由 ZITADEL 统一认证服务处理</div>
+  </div>
+</div>
+
 <div class="workspace-shell">
   <aside class="workspace-sidebar" id="workspace-sidebar">
-    <span id="user-name" class="sr-only">自动会话</span>
-
     <div class="sidebar-brand">
       <div class="brand-mark">Q</div>
       <div class="brand-copy">
-        <div class="sidebar-title">AI 出题</div>
-        <div class="sidebar-subtitle">对话式试题生成工作台</div>
+        <div class="sidebar-title">EduQG</div>
       </div>
     </div>
 
-    <button class="sidebar-primary" id="portrait-start-button" type="button">新建规范对话</button>
+    <button class="sidebar-primary" id="portrait-start-button" type="button">
+      <span aria-hidden="true">⊕</span>
+      <span>新规范</span>
+    </button>
 
     <section class="sidebar-panel session-panel">
       <div class="sidebar-panel-head">
-        <div class="sidebar-panel-title">对话历史</div>
-        <div class="sidebar-panel-hint">切换不同规范会话</div>
+        <div class="sidebar-panel-title">历史对话</div>
       </div>
       <input id="session-search" class="sidebar-search" type="text" placeholder="搜索会话标题或摘要">
       <div id="session-history-empty" class="sidebar-meta">当前还没有规范会话。</div>
       <div id="session-history" class="session-history"></div>
     </section>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" aria-hidden="true">●</div>
+        <span id="user-name" class="user-name">用户名</span>
+      </div>
+      <div class="sidebar-foot-actions">
+        <button id="open-auth-button" class="sidebar-icon-action" type="button" title="登录或切换账号">设置</button>
+        <button id="logout-button" class="sidebar-icon-action" type="button" title="退出登录">退出</button>
+      </div>
+    </div>
   </aside>
 
   <div class="resize-handle" id="sidebar-resize-handle" aria-hidden="true"></div>
 
   <main class="workspace-main">
+    <div id="inspector-launcher" class="inspector-launcher" aria-label="资料快捷入口">
+      <button id="inspector-rail-button" class="inspector-rail-button" type="button" aria-label="展开资料菜单" aria-haspopup="true" aria-expanded="false">
+        <span aria-hidden="true">◈</span>
+        <span>资料</span>
+      </button>
+      <div id="inspector-launcher-menu" class="inspector-launcher-menu" role="menu" aria-label="资料快捷菜单">
+        <button type="button" role="menuitem" title="题库" data-inspector-launch-target="inspector-section-result">
+          <span>题库</span>
+          <small>筛选与题目卡</small>
+        </button>
+        <button type="button" role="menuitem" title="题目规范说明" data-inspector-launch-target="inspector-section-spec">
+          <span>规范</span>
+          <small>当前规范文档</small>
+        </button>
+        <button type="button" role="menuitem" title="生成记录" data-inspector-launch-target="inspector-section-progress">
+          <span>记录</span>
+          <small>进度与日志</small>
+        </button>
+        <button type="button" role="menuitem" title="运行状态" data-inspector-launch-target="inspector-section-runtime">
+          <span>状态</span>
+          <small>模型与 OAH</small>
+        </button>
+      </div>
+    </div>
     <div class="studio-grid" id="studio-grid">
       <section class="chat-surface" id="chat-surface">
         <div class="chat-shell">
           <div class="chat-shell-head">
             <div class="chat-title-block" aria-hidden="true">
-              <div class="eyebrow">Question Agent Workbench</div>
-              <h1>对话式出题工作台</h1>
-              <div class="chat-head-subtitle">中间只保留核心对话。系统会通过追问逐步补齐试题规范，再发起生成。</div>
+              <div class="eyebrow">EduQG Workbench</div>
+              <h1>EduQG 出题工作台</h1>
+              <div class="chat-head-subtitle">在中间对话框内填写试题规范，右侧个人题库用于查看题目、规范说明和生成记录。</div>
             </div>
             <div class="surface-actions" aria-hidden="true">
               <button id="toggle-sidebar-button" class="btn btn-secondary" type="button">折叠左栏</button>
@@ -73,23 +204,98 @@
                 <span class="badge">等待开始</span>
               </div>
             </div>
-
-            <div id="portrait-chat" class="dialogue-list">
-              <div class="dialogue-card dialogue-assistant">
-                <div class="dialogue-role">assistant</div>
-                <div class="dialogue-text">点击“新建规范对话”，主智能体会先确认试题规范还缺哪些关键信息。</div>
+            <div class="empty-hero spec-form-hero" aria-hidden="true">
+              <h1 class="home-hero-title">Hi~ 今天想做什么？</h1>
+              <h1 class="form-hero-title">请完成以下表单</h1>
+              <div class="home-quick-actions">
+                <button class="home-chip" type="button" data-workbench-preset="single-question" data-knowledge-point="" data-algorithm="direct" data-question-type="multiple_choice" data-content-mode="text">单题生成</button>
+                <button class="home-chip" type="button" data-workbench-preset="text-question" data-knowledge-point="" data-algorithm="direct" data-question-type="multiple_choice" data-content-mode="text">文本题</button>
+                <button class="home-chip" type="button" data-workbench-preset="image-question" data-knowledge-point="" data-algorithm="react" data-question-type="short_answer" data-content-mode="image" data-image-mode="optional" data-image-placement="explanation_image">图片题</button>
+                <button class="home-chip" type="button" data-workbench-preset="direct-generate" data-knowledge-point="" data-algorithm="direct" data-question-type="multiple_choice" data-content-mode="text">直接生成</button>
               </div>
             </div>
 
+            <div id="portrait-chat" class="dialogue-list">
+              <div class="dialogue-card dialogue-assistant">
+                <div class="dialogue-role">EduQG</div>
+                <div class="dialogue-text">这里会显示规范校验与生成过程中的关键提示。</div>
+              </div>
+            </div>
+
+            <div id="chat-spec-form" class="chat-spec-form" aria-label="试题规范表单">
+              <div class="chat-spec-form-head">
+                <div>
+                  <strong>请完成以下表单</strong>
+                  <span>请完成以下表单，再校验并生成题目。</span>
+                </div>
+                <div id="request-badges" class="badge-row"></div>
+              </div>
+
+              <div class="chat-spec-grid">
+                <label class="field field-wide">
+                  <span>知识点 / 出题说明</span>
+                  <textarea id="knowledge-point" placeholder="例如：围绕一次函数图像性质，出一道难度 2 的文本选择题。"></textarea>
+                </label>
+                <label class="field">
+                  <span>学科</span>
+                  <input id="subject" name="subject" type="text" placeholder="例如：数学、建筑设计原理">
+                </label>
+                <label class="field">
+                  <span>难度</span>
+                  <select id="difficulty" name="difficulty">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>题型</span>
+                  <select id="question-type" name="question_type"></select>
+                </label>
+                <label class="field">
+                  <span>内容模式</span>
+                  <select id="content-mode" name="content_mode"></select>
+                </label>
+                <label class="field">
+                  <span>算法</span>
+                  <select id="algorithm" name="algorithm"></select>
+                </label>
+              </div>
+
+              <div id="image-controls" class="chat-spec-grid chat-spec-grid-compact">
+                <label class="field">
+                  <span>图片模式</span>
+                  <select id="image-mode" name="image_mode"></select>
+                </label>
+                <label class="field">
+                  <span>图片位置</span>
+                  <select id="image-placement" name="image_placement"></select>
+                </label>
+              </div>
+
+              <div id="request-summary" class="request-summary">请先填写试题规范。</div>
+              <div class="chat-spec-actions">
+                <button id="validate-button" class="btn btn-secondary" type="button">校验规范</button>
+                <button id="generate-button" class="btn btn-primary" type="button">开始生成</button>
+                <span id="generate-feedback" class="status">工作台初始化中。</span>
+              </div>
+            </div>
+
+            <div id="queued-portrait-reply" class="queued-reply hidden" aria-live="polite"></div>
+
             <div class="chat-composer">
-              <textarea id="portrait-reply" class="dialogue-input" placeholder="输入出题需求，按 Enter 开始对话。"></textarea>
+              <textarea id="portrait-reply" class="dialogue-input" placeholder="可选补充说明；按 Enter 会同步到上方规范表单。"></textarea>
+              <div id="portrait-attachments" class="composer-attachments" aria-live="polite"></div>
               <div class="chat-composer-actions">
                 <div class="composer-tools" aria-label="输入工具">
                   <label class="composer-tool" for="portrait-file-input" title="上传文件">
                     <span aria-hidden="true">＋</span>
-                    <span>文件</span>
+                    <span>图片</span>
                   </label>
-                  <input id="portrait-file-input" class="sr-only" type="file" multiple>
+                  <input id="portrait-file-input" class="sr-only" type="file" accept="image/*" multiple>
                   <button class="composer-tool" type="button" disabled title="工具">
                     <span aria-hidden="true">⌘</span>
                     <span>工具</span>
@@ -98,6 +304,15 @@
                     <span aria-hidden="true">@</span>
                     <span>引用</span>
                   </button>
+                  <button id="export-word-button" class="composer-tool" type="button" title="导出 Word">
+                    <span aria-hidden="true">⇩</span>
+                    <span>Word</span>
+                  </button>
+                  <select id="export-format-select" class="composer-tool-select" title="导出格式" aria-label="导出格式">
+                    <option value="word" selected>Word</option>
+                    <option value="pdf">PDF</option>
+                    <option value="excel">Excel</option>
+                  </select>
                 </div>
                 <span id="portrait-feedback" class="status composer-status">当前还没有规范文档。</span>
                 <button id="portrait-send-button" class="composer-send" type="button" title="发送" aria-label="发送">
@@ -114,18 +329,121 @@
       <aside class="inspector-column" id="inspector-column">
         <div id="inspector-expanded-stack" class="inspector-expanded-stack">
           <div class="inspector-utility-row">
-            <button id="close-inspector-detail-button" class="btn btn-ghost btn-compact" type="button">收起右栏</button>
+            <div class="inspector-panel-heading">
+              <strong>个人题库</strong>
+              <span>筛选与题目列表</span>
+            </div>
+            <button id="close-inspector-detail-button" class="btn btn-ghost btn-compact" type="button">收起</button>
             <button id="session-refresh-button" class="btn btn-ghost hidden" type="button">刷新</button>
             <button id="session-open-latest-button" class="btn btn-ghost hidden" type="button">最近会话</button>
             <button id="session-new-button" class="btn btn-secondary hidden" type="button">新建规范</button>
           </div>
 
+          <div class="material-workbench">
+            <nav class="material-sidebar" aria-label="个人题库层级">
+              <div class="material-search" aria-label="材料搜索">
+                <span>按条件筛选题库</span>
+                <span aria-hidden="true">⌕</span>
+              </div>
+              <div class="material-root-list">
+                <button class="material-root active" type="button" data-inspector-target="inspector-section-result">
+                  <span>个人题库</span>
+                  <small id="material-result-meta">暂无题目</small>
+                </button>
+                <div class="material-tree" aria-label="题目层级">
+                  <button class="material-node material-level-1" type="button" data-inspector-target="inspector-section-result">
+                    <span id="material-subject-label">学科：未确认</span>
+                    <small>学科 · <span id="material-subject-meta">待确认</span></small>
+                  </button>
+                  <button class="material-node material-level-2" type="button" data-inspector-target="inspector-section-result">
+                    <span id="material-knowledge-label">知识点：未确认</span>
+                    <small>知识点 · <span id="material-knowledge-meta">待确认</span></small>
+                  </button>
+                  <button class="material-node material-level-3" type="button" data-inspector-target="inspector-section-result">
+                    <span id="material-type-label">题型：未确认</span>
+                    <small>题型 · <span id="material-type-meta">选择题</span></small>
+                  </button>
+                  <button class="material-node material-level-4 material-question-node active" type="button" data-inspector-target="inspector-section-result">
+                    <span id="material-question-label">题目：当前题目</span>
+                    <small><span id="material-mode-meta">文本题</span></small>
+                  </button>
+                </div>
+                <button class="material-root" type="button" data-inspector-target="inspector-section-spec">
+                  <span>试题规范说明</span>
+                  <small id="material-spec-meta">未开始</small>
+                </button>
+              </div>
+              <div class="material-group material-utility-group">
+                <div class="material-group-title">生成记录</div>
+                <button class="material-node material-utility-node" type="button" data-inspector-target="inspector-section-progress">
+                  <span>执行进度</span>
+                  <small id="material-progress-meta">未开始</small>
+                </button>
+                <button class="material-node material-utility-node" type="button" data-inspector-target="inspector-section-preview">
+                  <span>规范 JSON</span>
+                  <small id="material-json-meta">未校验</small>
+                </button>
+                <button class="material-node material-utility-node" type="button" data-inspector-target="inspector-section-runtime">
+                  <span>运行调试</span>
+                  <small>OAH 状态</small>
+                </button>
+              </div>
+              <button class="material-import" type="button" data-inspector-target="inspector-section-settings">整理题库</button>
+            </nav>
+
+            <section class="material-preview-pane" aria-label="个人题库" aria-hidden="true">
+              <div class="material-preview-toolbar">
+                <div class="material-preview-heading">
+                  <strong id="material-preview-title">题目预览</strong>
+                  <span id="material-preview-subtitle">个人题库中的当前题目</span>
+                </div>
+                <div class="material-preview-actions" aria-label="预览操作">
+                  <button id="material-copy-button" class="btn btn-ghost btn-compact" type="button">复制</button>
+                  <button id="material-edit-button" class="btn btn-secondary btn-compact" type="button">编辑</button>
+                  <button id="material-export-button" class="btn btn-ghost btn-compact" type="button">导出</button>
+                  <button class="btn btn-ghost btn-compact material-preview-close" type="button" data-inspector-close-preview>关闭</button>
+                </div>
+              </div>
+              <div class="material-open-label">
+                <span aria-hidden="true">▣</span>
+                <span id="material-open-label">当前题目</span>
+              </div>
+
+          <details id="inspector-section-result" class="inspector-section is-active-preview" open>
+            <summary>
+              <span>出题结果</span>
+              <span class="inspector-section-meta">生成内容</span>
+            </summary>
+            <div class="inspector-section-body">
+              <div class="inspector-actions inspector-mini-actions">
+                <button id="export-result-button" class="btn btn-secondary" type="button">导出结果</button>
+              </div>
+              <div id="result-view" class="result-view">
+                <div class="library-search-panel">
+                  <div class="library-search-head">
+                    <strong>题库搜索</strong>
+                    <div class="library-search-status">
+                      <span>点击搜索</span>
+                      <button class="btn btn-secondary btn-compact" type="button" data-library-search>搜索</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="library-results-stack">
+                  <div class="result-card library-empty-card">设置筛选条件后点击搜索。</div>
+                </div>
+              </div>
+            </div>
+          </details>
+
           <details id="inspector-section-spec" class="inspector-section">
             <summary>
               <span>当前试题描述规范</span>
-              <span class="inspector-section-meta">完整规范</span>
+              <span class="inspector-section-meta" id="portrait-spec-meta">未开始</span>
             </summary>
             <div class="inspector-section-body">
+              <div class="inspector-actions inspector-mini-actions">
+                <button id="export-spec-button" class="btn btn-secondary" type="button">导出规范</button>
+              </div>
               <div class="session-strip session-strip-side">
                 <div class="session-strip-main">
                   <div class="session-strip-title" id="session-strip-title">当前规范：未开始</div>
@@ -139,21 +457,21 @@
           <details id="inspector-section-missing" class="inspector-section">
             <summary>
               <span>待补充信息</span>
-              <span class="inspector-section-meta">缺失项</span>
+              <span class="inspector-section-meta" id="portrait-missing-meta">缺失项</span>
             </summary>
             <div class="inspector-section-body">
               <div id="portrait-errors" class="error-box">
                 <strong>缺失信息</strong>
                 <p>还没有启动规范对话。</p>
               </div>
-              <div id="portrait-next-step" class="next-step-box">下一步：等待主智能体开始追问。</div>
+              <div id="portrait-next-step" class="next-step-box">下一步：填写学科、知识点、难度、题型和内容模式。</div>
             </div>
           </details>
 
           <details id="inspector-section-confirmed" class="inspector-section">
             <summary>
               <span>已确认字段</span>
-              <span class="inspector-section-meta">已补齐</span>
+              <span class="inspector-section-meta" id="portrait-confirmed-meta">未确认</span>
             </summary>
             <div class="inspector-section-body">
               <div id="portrait-checklist" class="checklist-box">
@@ -171,10 +489,6 @@
               <div class="inspector-actions support-actions hidden">
                 <button id="portrait-sync-button" class="btn btn-ghost" type="button">同步规范到参数区</button>
                 <button id="session-sync-button" class="btn btn-ghost" type="button">同步到参数区</button>
-              </div>
-
-              <div class="inspector-input-wrap hidden">
-                <textarea id="knowledge-point" placeholder="可选：如果你想先给系统一个启动描述，可以在这里补充，例如：围绕一次函数图像性质，出一道难度 2 的文本选择题。"></textarea>
               </div>
 
               <div class="mode-launcher mode-launcher-stack hidden">
@@ -196,65 +510,7 @@
                 </button>
               </div>
 
-              <div class="form-grid">
-                <label class="field">
-                  <span>难度</span>
-                  <select id="difficulty" name="difficulty">
-                    <option value="1">1</option>
-                    <option value="2" selected>2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>算法</span>
-                  <select id="algorithm" name="algorithm"></select>
-                </label>
-                <label class="field">
-                  <span>题型</span>
-                  <select id="question-type" name="question_type"></select>
-                </label>
-                <label class="field">
-                  <span>内容模式</span>
-                  <select id="content-mode" name="content_mode"></select>
-                </label>
-              </div>
-
-              <div id="image-controls" class="form-grid">
-                <label class="field">
-                  <span>图片模式</span>
-                  <select id="image-mode" name="image_mode"></select>
-                </label>
-                <label class="field">
-                  <span>图片位置</span>
-                  <select id="image-placement" name="image_placement"></select>
-                </label>
-              </div>
-
-              <div id="request-badges" class="badge-row"></div>
-              <div id="request-summary" class="request-summary">请先开始规范对话。</div>
-
-              <div class="inspector-actions inspector-mini-actions">
-                <button id="validate-button" class="btn btn-secondary" type="button">校验规范</button>
-                <button id="generate-button" class="btn btn-primary" type="button">开始生成</button>
-              </div>
-              <div class="inspector-status-line">
-                <span id="generate-feedback" class="status">工作台初始化中。</span>
-              </div>
-            </div>
-          </details>
-
-          <details id="inspector-section-result" class="inspector-section">
-            <summary>
-              <span>出题结果</span>
-              <span class="inspector-section-meta">生成内容</span>
-            </summary>
-            <div class="inspector-section-body">
-              <div id="result-view" class="result-view">
-                <div class="result-card">暂无结果。生成成功后，这里会显示题干、选项、解析和图片资产。</div>
-              </div>
+              <div class="request-summary">试题规范字段已移到中间对话框中填写。</div>
             </div>
           </details>
 
@@ -313,7 +569,7 @@
                   <div class="progress-mark">0</div>
                   <div>
                     <div class="progress-title">等待请求</div>
-                    <div class="progress-detail">发起生成后，这里会轮询状态接口并显示各阶段进度。</div>
+                <div class="progress-detail">发起生成后，这里会轮询状态接口并显示各阶段进度。</div>
                   </div>
                 </div>
               </div>
@@ -323,6 +579,8 @@
               </details>
             </div>
           </details>
+            </section>
+          </div>
         </div>
       </aside>
     </div>

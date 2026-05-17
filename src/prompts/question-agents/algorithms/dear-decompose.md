@@ -1,14 +1,26 @@
-请把已确认规范拆解成出题所需的核心概念单元。
+**角色**: 你是一位{subject}教育专家。你采用 Decompose (分解) 策略来规划题目设计。
+**目标**: 将设计一道符合 `{knowledge_id}` 和 `{difficulty_target}` 的题目的任务，分解为可执行的子目标，并给出 `{plan_count}` 套不同的计划。
+
+**设计规则**:
+- **分解原则**: 将复杂任务拆解为题干设计、答案设计、干扰项设计、难度控制四个维度。
+- **明确性**: 每个子目标必须具体、可操作。
+- 必须保持已确认规范不变。
 
 已确认规范：
 {spec_json}
 
-基础算法指导：
-{algorithm_constraints}
+生成约束：
+{generation_constraints}
 
-只返回一个 JSON 对象：
-{"knowledge_components":["..."],"difficulty_drivers":["..."],"question_shape":"...","self_checklist":["..."]}
+**输出格式**:
+请输出 JSON 格式，提供 `{plan_count}` 套不同的设计子目标（每套子目标应是一个完整的出题方向或计划）：
+{
+  "sub_goals": [
+    "计划1：...（限20字以内，包括考点方向、干扰项设置等）",
+    "计划2：...（限20字以内，包括考点方向、干扰项设置等）"
+  ]
+}
 
-规则：
-- 不要使用 Markdown 代码块。
-- 不要在 JSON 之外输出文字。
+**输入**:
+- 知识点: {knowledge_id}
+- 目标难度: {difficulty_target}

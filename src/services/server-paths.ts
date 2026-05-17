@@ -33,6 +33,14 @@ export interface TutorPostgresConfig {
   schema: string;
 }
 
+export interface TutorZitadelConfig {
+  enabled: boolean;
+  baseUrl: string;
+  personalAccessToken: string;
+  clientId: string;
+  timeoutMs: number;
+}
+
 export type TutorStorageBackend = "memory" | "filesystem" | "postgres";
 export type TutorStateBackend = TutorStorageBackend;
 
@@ -41,12 +49,18 @@ export interface TutorServerEnvironment {
   sessionTtlMs: number;
   storageBackend: TutorStorageBackend;
   postgres: TutorPostgresConfig;
+  zitadel: TutorZitadelConfig;
+  authBypass: {
+    enabled: boolean;
+    uid: string;
+  };
 }
 
 const DEFAULT_PORT = 7896;
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_POSTGRES_PORT = 5432;
 const DEFAULT_POSTGRES_SCHEMA = "public";
+const DEFAULT_ZITADEL_TIMEOUT_MS = 10000;
 
 function uniqueResolvedPaths(paths: string[]): string[] {
   return [...new Set(paths.map((candidate) => path.resolve(candidate)))];
@@ -113,6 +127,11 @@ function normalizePostgresSchema(value: string | undefined): string {
   return normalized || DEFAULT_POSTGRES_SCHEMA;
 }
 
+function normalizeTimeoutMs(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? String(fallback), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function loadTutorPostgresConfig(): TutorPostgresConfig {
   return {
     connectionString: (process.env.DATABASE_URL || "").trim() || null,
@@ -123,6 +142,20 @@ function loadTutorPostgresConfig(): TutorPostgresConfig {
     password: process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || "",
     ssl: normalizeBoolean(process.env.POSTGRES_SSL || process.env.PGSSL, false),
     schema: normalizePostgresSchema(process.env.POSTGRES_SCHEMA),
+  };
+}
+
+function loadTutorZitadelConfig(): TutorZitadelConfig {
+  const provider = (process.env.TUTOR_AUTH_PROVIDER || "").trim().toLowerCase();
+  const baseUrl = (process.env.ZITADEL_BASE_URL || "").trim();
+  const personalAccessToken = process.env.ZITADEL_PAT || process.env.ZITADEL_PERSONAL_ACCESS_TOKEN || "";
+  const clientId = (process.env.ZITADEL_CLIENT_ID || "").trim();
+  return {
+    enabled: provider === "zitadel" || Boolean(baseUrl && personalAccessToken),
+    baseUrl,
+    personalAccessToken,
+    clientId,
+    timeoutMs: normalizeTimeoutMs(process.env.ZITADEL_REQUEST_TIMEOUT_MS, DEFAULT_ZITADEL_TIMEOUT_MS),
   };
 }
 
@@ -209,5 +242,10 @@ export function loadTutorServerEnvironment(envPath: string): TutorServerEnvironm
     sessionTtlMs: normalizeSessionTtlMs(process.env.SESSION_TTL_MS),
     storageBackend: normalizeStorageBackend(process.env.TUTOR_STORAGE_BACKEND ?? process.env.TUTOR_STATE_BACKEND),
     postgres: loadTutorPostgresConfig(),
+    zitadel: loadTutorZitadelConfig(),
+    authBypass: {
+      enabled: normalizeBoolean(process.env.TUTOR_AUTH_BYPASS, false),
+      uid: (process.env.TUTOR_AUTH_BYPASS_UID || "admin").trim() || "admin",
+    },
   };
 }

@@ -6,7 +6,9 @@ import { logEvent } from "../utils/request";
 export type AuthMiddleware = RequestHandler;
 export type UidResolver = (req: Request) => string | null;
 
-const SHARED_WORKBENCH_UID = process.env.TUTOR_SHARED_UID?.trim() || "admin";
+interface AuthenticatedRequest extends Request {
+  authUid?: string;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -26,11 +28,20 @@ function readSessionToken(req: Request): string | undefined {
 }
 
 export function createUidResolver(authService: TutorAuthService): UidResolver {
-  return (_req: Request) => SHARED_WORKBENCH_UID;
+  void authService;
+  return (req: Request) => {
+    return (req as AuthenticatedRequest).authUid || null;
+  };
 }
 
 export function createRequireAuth(authService: TutorAuthService): AuthMiddleware {
-  return (_req: Request, _res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const uid = await authService.getUidForToken(readSessionToken(req));
+    if (!uid) {
+      res.status(401).json({ error: "Authentication required or session expired" });
+      return;
+    }
+    (req as AuthenticatedRequest).authUid = uid;
     next();
   };
 }
@@ -57,7 +68,9 @@ export function createAuthRouter(authService: TutorAuthService): Router {
     const body = readRequestBody(req);
     const uid = readString(body.uid).trim();
     const password = readString(body.password);
-    const result = await authService.register(uid, password);
+    const email = readString(body.email).trim();
+    const displayName = readString(body.displayName).trim();
+    const result = await authService.register(uid, password, { email, displayName });
     if (!result.ok) {
       logEvent("warn", req, "auth.register.failed", { uid: uid || null, status_code: result.status });
       res.status(result.status).json({ error: result.error });
@@ -73,9 +86,14 @@ export function createAuthRouter(authService: TutorAuthService): Router {
     res.json({ ok: true });
   });
 
-  router.get("/me", (req: Request, res: Response) => {
-    const uid = getUidFromReq(req);
-    res.json({ uid });
+  router.get("/me", async (req: Request, res: Response) => {
+    const uid = await authService.getUidForToken(readSessionToken(req));
+    if (!uid) {
+      res.status(401).json({ error: "Authentication required or session expired" });
+      return;
+    }
+    (req as AuthenticatedRequest).authUid = uid;
+    res.json({ uid: getUidFromReq(req) });
   });
 
   return router;

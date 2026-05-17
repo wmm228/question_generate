@@ -12,6 +12,11 @@ import {
   createInMemoryQuestionPortraitStore,
   type QuestionPortraitStore,
 } from "./question-portrait-store";
+import {
+  createFileSystemQuestionFeedbackStore,
+  createInMemoryQuestionFeedbackStore,
+  type QuestionFeedbackStore,
+} from "./question-feedback-store";
 import { createInMemoryTutorAuthStore, createJsonFileTutorAuthStore, type TutorAuthStore } from "./tutor-auth-store";
 import { createTutorPostgresRuntime } from "./tutor-postgres";
 
@@ -26,6 +31,7 @@ export interface TutorStorage {
   authStore: TutorAuthStore;
   aiGenerateStatusStore: AiGenerateStatusStore;
   questionPortraitStore: QuestionPortraitStore;
+  questionFeedbackStore: QuestionFeedbackStore;
   paths: {
     stateDirectory: string;
     usersPath: string | null;
@@ -55,13 +61,14 @@ export async function createTutorStorage(deps: CreateTutorStorageDependencies): 
       authStore: createInMemoryTutorAuthStore(),
       aiGenerateStatusStore: createInMemoryAiGenerateStatusStore(),
       questionPortraitStore: createInMemoryQuestionPortraitStore(),
+      questionFeedbackStore: createInMemoryQuestionFeedbackStore(),
       paths: {
         stateDirectory: deps.paths.stateDirectory,
         usersPath: null,
         sessionsPath: null,
       },
-      async close(): Promise<void> {
-        return;
+      close(): Promise<void> {
+        return Promise.resolve();
       },
     };
   }
@@ -73,6 +80,7 @@ export async function createTutorStorage(deps: CreateTutorStorageDependencies): 
       authStore: runtime.authStore,
       aiGenerateStatusStore: runtime.aiGenerateStatusStore,
       questionPortraitStore: runtime.questionPortraitStore,
+      questionFeedbackStore: runtime.questionFeedbackStore,
       paths: {
         stateDirectory: deps.paths.stateDirectory,
         usersPath: null,
@@ -103,13 +111,16 @@ export async function createTutorStorage(deps: CreateTutorStorageDependencies): 
     questionPortraitStore: createFileSystemQuestionPortraitStore({
       baseDirectory: deps.paths.stateDirectory,
     }),
+    questionFeedbackStore: createFileSystemQuestionFeedbackStore({
+      baseDirectory: deps.paths.stateDirectory,
+    }),
     paths: {
       stateDirectory: deps.paths.stateDirectory,
       usersPath,
       sessionsPath,
     },
-    async close(): Promise<void> {
-      return;
+    close(): Promise<void> {
+      return Promise.resolve();
     },
   };
 }

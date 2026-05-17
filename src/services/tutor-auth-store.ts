@@ -63,17 +63,19 @@ export function createJsonFileTutorAuthStore(
   deps: JsonFileTutorAuthStoreDependencies,
 ): TutorAuthStore {
   return {
-    async loadUsers(): Promise<UsersDB> {
-      return readJsonFile<UsersDB>(deps.usersPath, {});
+    loadUsers(): Promise<UsersDB> {
+      return Promise.resolve(readJsonFile<UsersDB>(deps.usersPath, {}));
     },
-    async saveUsers(users: UsersDB): Promise<void> {
+    saveUsers(users: UsersDB): Promise<void> {
       writeJsonFile(deps.usersPath, users);
+      return Promise.resolve();
     },
-    async loadSessions(): Promise<Record<string, unknown>> {
-      return readJsonFile<Record<string, unknown>>(deps.sessionsPath, {});
+    loadSessions(): Promise<Record<string, unknown>> {
+      return Promise.resolve(readJsonFile<Record<string, unknown>>(deps.sessionsPath, {}));
     },
-    async saveSessions(sessions: SessionsDB): Promise<void> {
+    saveSessions(sessions: SessionsDB): Promise<void> {
       writeJsonFile(deps.sessionsPath, sessions);
+      return Promise.resolve();
     },
   };
 }
@@ -85,17 +87,19 @@ export function createInMemoryTutorAuthStore(
   let sessions = cloneSessions(options.sessions ?? {});
 
   return {
-    async loadUsers(): Promise<UsersDB> {
-      return cloneUsers(users);
+    loadUsers(): Promise<UsersDB> {
+      return Promise.resolve(cloneUsers(users));
     },
-    async saveUsers(nextUsers: UsersDB): Promise<void> {
+    saveUsers(nextUsers: UsersDB): Promise<void> {
       users = cloneUsers(nextUsers);
+      return Promise.resolve();
     },
-    async loadSessions(): Promise<Record<string, unknown>> {
-      return cloneSessions(sessions);
+    loadSessions(): Promise<Record<string, unknown>> {
+      return Promise.resolve(cloneSessions(sessions));
     },
-    async saveSessions(nextSessions: SessionsDB): Promise<void> {
+    saveSessions(nextSessions: SessionsDB): Promise<void> {
       sessions = cloneSessions(nextSessions);
+      return Promise.resolve();
     },
   };
 }

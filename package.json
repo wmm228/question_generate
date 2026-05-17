@@ -15,6 +15,7 @@
     "start:local-oah": "node dist/src/server-local-oah.js",
     "smoke:oah-question": "npm run build:server && node dist/src/tools/oah-question-smoke.js",
     "test:ai-generate": "node tools/ai-generate-regression.js",
+    "test:ai-generate:algorithms": "node tools/ai-generate-algorithm-smoke.js",
     "lint": "npx eslint \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\"",
     "lint:fix": "npx eslint \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\" --fix",
     "format": "npx prettier --write \"src/**/*.ts\" \"ai_generators-ts/**/*.ts\" \"*.{json,md}\"",

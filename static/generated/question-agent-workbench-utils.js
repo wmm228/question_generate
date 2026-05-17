@@ -36,7 +36,35 @@ export function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 export function renderMathText(value) {
-    return escapeHtml(value).replace(/\r?\n/g, "<br>");
+    const source = normalizeString(value);
+    if (!source) {
+        return "";
+    }
+    const parts = [];
+    const fencePattern = /```([A-Za-z0-9_-]*)[ \t]*\n([\s\S]*?)```/g;
+    let cursor = 0;
+    let match = fencePattern.exec(source);
+    while (match) {
+        if (match.index > cursor) {
+            parts.push(renderPlainTextSegment(source.slice(cursor, match.index)));
+        }
+        const language = normalizeString(match[1]) || "text";
+        const code = match[2].replace(/^\n+|\n+$/g, "");
+        parts.push(`
+      <pre class="code-block"><div class="code-block-head"><span>${escapeHtml(language)}</span></div><code>${escapeHtml(code)}</code></pre>
+    `);
+        cursor = match.index + match[0].length;
+        match = fencePattern.exec(source);
+    }
+    if (cursor < source.length) {
+        parts.push(renderPlainTextSegment(source.slice(cursor)));
+    }
+    return parts.join("");
+}
+function renderPlainTextSegment(value) {
+    return escapeHtml(value)
+        .replace(/`([^`\n]+)`/g, "<code class=\"inline-code\">$1</code>")
+        .replace(/\r?\n/g, "<br>");
 }
 export function sanitizeImageSrc(value) {
     const src = normalizeString(value);
@@ -55,7 +83,17 @@ export function readStructuredImageSrc(value) {
     if (!isRecord(value)) {
         return null;
     }
-    return sanitizeImageSrc(value.url);
+    return sanitizeImageSrc(value.url)
+        || sanitizeImageSrc(value.src)
+        || sanitizeImageSrc(value.href)
+        || sanitizeImageSrc(value.data_uri)
+        || sanitizeImageSrc(value.dataUrl)
+        || sanitizeImageSrc(value.base64)
+        || sanitizeImageSrc(value.path)
+        || sanitizeImageSrc(value.image_url)
+        || sanitizeImageSrc(value.imageUrl)
+        || sanitizeImageSrc(value.image_path)
+        || sanitizeImageSrc(value.imagePath);
 }
 export function resolveStemImageSrc(result) {
     return sanitizeImageSrc(result.stem_image)
@@ -225,13 +263,14 @@ export function readPortraitStatusExplanation(portrait) {
     return normalizeString(portrait.guidance.status_explanation);
 }
 const PENDING_FIELD_LABELS = {
+    subject: "学科",
     knowledge_point: "知识点",
     difficulty: "难度",
     question_type: "题型",
     content_mode: "内容模式",
     algorithm: "算法",
     image_requirement: "图片要求",
-    teacher_profile: "教师偏好",
+    teacher_profile: "教学偏好",
     student_profile: "学生情况",
     none: "无",
 };

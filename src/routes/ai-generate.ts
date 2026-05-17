@@ -1,10 +1,16 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
+import { createHash } from "crypto";
 
 import { generateAiQuestion } from "../services/ai-generate";
 import { type AiGenerateStatusStore } from "../services/ai-generate-status";
 import { getOahCoreConfig } from "../services/oah-config";
 import { normalizeQuestionGenerationSpec } from "../services/question-agent-spec";
-import { normalizeAiGenPayload, validateAiGenPayload } from "../types/ai-generate";
+import {
+  normalizeAiGenPayload,
+  validateAiGenPayload,
+  type AiGenerateApiResponse,
+  type AiGenPayload,
+} from "../types/ai-generate";
 import { getRequestId, logEvent, serializeError } from "../utils/request";
 
 export type AuthMiddleware = RequestHandler;
@@ -17,6 +23,14 @@ export interface AiGenerateRouterDependencies {
 export interface AiGenerateRouteOptions {
   generatePath?: string;
   statusPath?: string;
+  resolveOwnerUid?: (req: Request) => string | null;
+  persistGeneratedQuestion?: (context: {
+    req: Request;
+    body: Record<string, unknown>;
+    requestId: string;
+    payload: AiGenPayload;
+    result: AiGenerateApiResponse;
+  }) => Promise<void>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -27,11 +41,36 @@ function readRequestBody(req: Request): Record<string, unknown> {
   return isRecord(req.body) ? req.body : {};
 }
 
+function normalizeOwnerUid(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildScopedRequestId(publicRequestId: string, ownerUid: string): string {
+  const normalizedOwnerUid = normalizeOwnerUid(ownerUid);
+  if (!normalizedOwnerUid) {
+    return publicRequestId;
+  }
+  const ownerHash = createHash("sha256").update(normalizedOwnerUid).digest("hex").slice(0, 16);
+  return `owner_${ownerHash}-${publicRequestId}`;
+}
+
+function toPublicStatusSnapshot<T extends { requestId: string }>(snapshot: T, publicRequestId: string): T {
+  return {
+    ...snapshot,
+    requestId: publicRequestId,
+  };
+}
+
 function buildOahExecutionHint(configuredModelRef: string): string {
   if (configuredModelRef) {
     return `当前 Tutor 配置的 OAH_MODEL_NAME=${configuredModelRef}。请确认该 modelRef 在 OAH 中存在，并且其上游模型 API 可连通。`;
   }
   return "当前 Tutor 没有显式配置 OAH_MODEL_NAME，正在使用 OAH workspace 默认模型。请先查看 /api/ai-question/oah-status 返回的 diagnosis.available_models，再把可用的 modelRef 写入 Tutor .env 的 OAH_MODEL_NAME。";
+}
+
+function buildOahTimeoutHint(configuredModelRef: string): string {
+  const modelText = configuredModelRef ? `当前模型为 ${configuredModelRef}` : "当前使用 OAH workspace 默认模型";
+  return `${modelText}。本次 OAH run 超过 OAH_RUN_TIMEOUT_MS 后被终止；选项配图和复杂 SVG 图片题会明显更慢。已确认模型在执行但没有及时返回时，应提高 OAH_RUN_TIMEOUT_MS，或降低本题图片复杂度后重试。`;
 }
 
 export function attachAiGenerateRoutes(
@@ -49,28 +88,33 @@ export function attachAiGenerateRoutes(
       return;
     }
 
-    const snapshot = await deps.statusStore.get(requestId);
+    const ownerUid = normalizeOwnerUid(options.resolveOwnerUid?.(req));
+    const statusRequestId = buildScopedRequestId(requestId, ownerUid);
+    const snapshot = await deps.statusStore.get(statusRequestId);
     if (!snapshot) {
       res.status(404).json({ error: "未找到执行进度" });
       return;
     }
 
-    res.json(snapshot);
+    res.json(toPublicStatusSnapshot(snapshot, requestId));
   });
 
   router.post(generatePath, deps.requireAuth, async (req: Request, res: Response) => {
     const reqStart = Date.now();
-    const reqId = getRequestId(req);
-    await deps.statusStore.ensure(reqId);
-    await deps.statusStore.appendLog(reqId, "服务器已接收 AI 出题请求。");
+    const publicReqId = getRequestId(req);
+    const ownerUid = normalizeOwnerUid(options.resolveOwnerUid?.(req));
+    const statusRequestId = buildScopedRequestId(publicReqId, ownerUid);
+    await deps.statusStore.ensure(statusRequestId);
+    await deps.statusStore.appendLog(statusRequestId, "服务器已接收 AI 出题请求。");
 
     const body = readRequestBody(req);
     const normalizedSpec = normalizeQuestionGenerationSpec({
       ...body,
-      request_uuid: body.request_uuid ?? reqId,
+      request_uuid: body.request_uuid ?? publicReqId,
     });
     const payload = normalizeAiGenPayload(body);
     const {
+      subject,
       knowledge_point,
       difficulty,
       algorithm,
@@ -84,7 +128,9 @@ export function attachAiGenerateRoutes(
     logEvent("info", req, "ai_generate.request.received", {
       spec_id: normalizedSpec.spec.spec_id,
       spec_status: normalizedSpec.spec.status,
+      status_request_uuid: statusRequestId,
       algorithm,
+      subject,
       difficulty,
       knowledge_point,
       question_type,
@@ -95,11 +141,11 @@ export function attachAiGenerateRoutes(
     });
 
     if (normalizedSpec.spec.status !== "ready") {
-      await deps.statusStore.updateStage(reqId, "generate", "error", "教师侧试题规范尚未确认。");
-      await deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未开始。");
-      await deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未开始。");
-      await deps.statusStore.appendLog(reqId, "教师确认尚未完成，已阻止本次生成。");
-      await deps.statusStore.finish(reqId, "教师侧试题规范尚未确认。");
+      await deps.statusStore.updateStage(statusRequestId, "generate", "error", "教师侧试题规范尚未确认。");
+      await deps.statusStore.updateStage(statusRequestId, "evaluate", "error", "评估阶段未开始。");
+      await deps.statusStore.updateStage(statusRequestId, "render", "error", "响应组装阶段未开始。");
+      await deps.statusStore.appendLog(statusRequestId, "教师确认尚未完成，已阻止本次生成。");
+      await deps.statusStore.finish(statusRequestId, "教师侧试题规范尚未确认。");
       logEvent("warn", req, "ai_generate.spec.blocked", {
         spec_id: normalizedSpec.spec.spec_id,
         validation_errors: normalizedSpec.spec.validation_errors,
@@ -115,11 +161,11 @@ export function attachAiGenerateRoutes(
 
     const validationError = validateAiGenPayload(payload);
     if (validationError) {
-      await deps.statusStore.updateStage(reqId, "generate", "error", "请求参数校验失败。");
-      await deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未开始。");
-      await deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未开始。");
-      await deps.statusStore.appendLog(reqId, `请求参数校验失败：${validationError}`);
-      await deps.statusStore.finish(reqId, validationError);
+      await deps.statusStore.updateStage(statusRequestId, "generate", "error", "请求参数校验失败。");
+      await deps.statusStore.updateStage(statusRequestId, "evaluate", "error", "评估阶段未开始。");
+      await deps.statusStore.updateStage(statusRequestId, "render", "error", "响应组装阶段未开始。");
+      await deps.statusStore.appendLog(statusRequestId, `请求参数校验失败：${validationError}`);
+      await deps.statusStore.finish(statusRequestId, validationError);
       logEvent("warn", req, "ai_generate.request.invalid", {
         spec_id: normalizedSpec.spec.spec_id,
         error_message: validationError,
@@ -130,7 +176,7 @@ export function attachAiGenerateRoutes(
 
     try {
       await deps.statusStore.appendLog(
-        reqId,
+        statusRequestId,
         `规范已确认，正在调用生成智能体 ${normalizedSpec.spec.generation_contract.generator_agent}。`,
       );
       logEvent("info", req, "ai_generate.spec.ready", {
@@ -143,18 +189,60 @@ export function attachAiGenerateRoutes(
 
       const result = await generateAiQuestion(
         payload,
-        reqId,
+        statusRequestId,
         normalizedSpec,
         (event) => {
-          void deps.statusStore.applyProgressEvent(reqId, event).catch(() => undefined);
+          void deps.statusStore.applyProgressEvent(statusRequestId, event).catch(() => undefined);
         },
       );
 
-      await deps.statusStore.updateStage(reqId, "generate", "done", "草稿生成已完成。");
-      await deps.statusStore.updateStage(reqId, "evaluate", "done", "评估与修订已完成。");
-      await deps.statusStore.updateStage(reqId, "render", "done", "最终响应组装已完成。");
-      await deps.statusStore.appendLog(reqId, "AI 出题流程已完成。");
-      await deps.statusStore.finish(reqId);
+      if (content_mode === "image" && image_mode === "required" && result.image_generation_failed === true) {
+        const resultRecord = result as unknown as Record<string, unknown>;
+        const visualError = typeof resultRecord.visual_pipeline_error === "string"
+          ? resultRecord.visual_pipeline_error
+          : "必需图片未生成。";
+        const errorMessage = `图片渲染失败，必需图片未生成：${visualError}`;
+        await deps.statusStore.updateStage(statusRequestId, "generate", "done", "草稿生成已完成。");
+        await deps.statusStore.updateStage(statusRequestId, "evaluate", "done", "评估与修订已完成。");
+        await deps.statusStore.updateStage(statusRequestId, "render", "error", "图片渲染失败，必需图片未生成。");
+        await deps.statusStore.appendLog(statusRequestId, errorMessage);
+        await deps.statusStore.finish(statusRequestId, errorMessage);
+        logEvent("error", req, "ai_generate.required_image.failed", {
+          duration_ms: Date.now() - reqStart,
+          visual_error: visualError,
+        });
+        res.status(502).json({
+          error: "图片题渲染失败，未生成必需图片。",
+          code: "AI_IMAGE_RENDER_FAILED",
+          details: visualError,
+          result,
+        });
+        return;
+      }
+
+      await deps.statusStore.updateStage(statusRequestId, "generate", "done", "草稿生成已完成。");
+      await deps.statusStore.updateStage(statusRequestId, "evaluate", "done", "评估与修订已完成。");
+      await deps.statusStore.updateStage(statusRequestId, "render", "done", "最终响应组装已完成。");
+      await deps.statusStore.appendLog(statusRequestId, "AI 出题流程已完成。");
+      await deps.statusStore.finish(statusRequestId);
+
+      if (options.persistGeneratedQuestion) {
+        try {
+          await options.persistGeneratedQuestion({
+            req,
+            body,
+            requestId: publicReqId,
+            payload,
+            result,
+          });
+        } catch (persistError) {
+          await deps.statusStore.appendLog(statusRequestId, "题目已生成，但写入画像历史失败。").catch(() => undefined);
+          logEvent("error", req, "ai_generate.history_persist_failed", {
+            duration_ms: Date.now() - reqStart,
+            error: serializeError(persistError),
+          });
+        }
+      }
 
       logEvent("info", req, "ai_generate.response.generated", {
         duration_ms: Date.now() - reqStart,
@@ -167,15 +255,28 @@ export function attachAiGenerateRoutes(
       const message = error instanceof Error ? error.message : String(error);
       const oahConfig = getOahCoreConfig();
       const configuredModelRef = oahConfig.model || "";
-      await deps.statusStore.updateStage(reqId, "generate", "error", "生成阶段未成功完成。");
-      await deps.statusStore.updateStage(reqId, "evaluate", "error", "评估阶段未成功完成。");
-      await deps.statusStore.updateStage(reqId, "render", "error", "响应组装阶段未成功完成。");
-      await deps.statusStore.appendLog(reqId, `流程执行失败：${message}`);
-      await deps.statusStore.finish(reqId, message);
+      await deps.statusStore.updateStage(statusRequestId, "generate", "error", "生成阶段未成功完成。");
+      await deps.statusStore.updateStage(statusRequestId, "evaluate", "error", "评估阶段未成功完成。");
+      await deps.statusStore.updateStage(statusRequestId, "render", "error", "响应组装阶段未成功完成。");
+      await deps.statusStore.appendLog(statusRequestId, `流程执行失败：${message}`);
+      await deps.statusStore.finish(statusRequestId, message);
       logEvent("error", req, "ai_generate.response.failed", {
         duration_ms: Date.now() - reqStart,
         error: serializeError(error),
       });
+
+      if (
+        message.includes("status=timed_out")
+        || message.includes("Run exceeded configured timeout")
+      ) {
+        res.status(504).json({
+          error: "当前模型生成超时。",
+          code: "OAH_MODEL_TIMEOUT",
+          details: message,
+          hint: buildOahTimeoutHint(configuredModelRef),
+        });
+        return;
+      }
 
       if (
         message.includes("Cannot connect to API")
@@ -205,7 +306,10 @@ export function attachAiGenerateRoutes(
         return;
       }
 
-      if (message.includes("no execution worker is available for runs")) {
+      if (
+        message.includes("no execution worker is available for runs")
+        || message.includes("没有可执行运行任务")
+      ) {
         res.status(503).json({
           error: "AI 出题执行 Worker 当前不可用。",
           code: "AI_GENERATE_WORKER_UNAVAILABLE",

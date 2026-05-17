@@ -32,6 +32,7 @@ export const QUESTION_TOOL_NAMES = [
 
 export const QUESTION_SPEC_STATUSES = ["draft", "ready", "blocked"] as const;
 export const QUESTION_CONTROLLED_FIELD_KEYS = [
+  "subject",
   "knowledge_point",
   "difficulty",
   "question_type",
@@ -77,7 +78,7 @@ export interface StudentProfile {
 export interface QuestionImageRequirement {
   mode: AiGenImageMode;
   targets: AiGenImageTarget[];
-  renderer: "none" | "manim" | "visual_solver";
+  renderer: "none" | "safe_svg" | "visual_solver";
   must_be_answer_relevant: boolean;
 }
 
@@ -95,6 +96,7 @@ export interface QuestionGenerationSpec {
   request_uuid: string;
   version: "edu-question-spec.v1";
   status: QuestionSpecStatus;
+  subject: string;
   knowledge_point: string;
   difficulty_level: number;
   question_type: AiGenQuestionType;

@@ -1,20 +1,26 @@
-请在分析发现问题后，重新思考并修订这份试题草稿。
+**角色**: 你是一位{subject}教育专家。你采用 Rethink (反思) 策略，根据旧版题目和新的见解更新题目。
+**目标**: 针对旧版题目中的缺陷，结合最新分析的见解，更新并产出修订后的题目。
 
 已确认规范：
 {spec_json}
 
-拆解结果：
-{decomposition_json}
+旧版题目：
+{prev_item_json}
 
-上一版草稿 JSON：
-{draft_json}
+旧版题目的分析：
+{prev_rationale}
 
-评估分析：
-{evaluation_json}
+新视角的分析：
+{new_rationale}
 
 生成约束：
 {generation_constraints}
 
-只返回一个修订后的合法 JSON 对象。
-- 不要使用 Markdown 代码块。
-- 不要在 JSON 之外输出文字。
+**输出格式**:
+请严格输出且仅输出一个最终定稿 JSON 对象：
+{
+  "question": "修订后的题干",
+  "options": ["选项A", "选项B", "选项C", "选项D"],
+  "ground_truth": "A",
+  "solution_steps": ["解析步骤1", "解析步骤2"]
+}

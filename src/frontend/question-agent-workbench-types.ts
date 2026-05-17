@@ -101,18 +101,59 @@ export interface GeneratedStructuredContent {
   };
 }
 
+export interface GeneratedRequestMeta {
+  subject?: string;
+  knowledge_point?: string;
+  difficulty?: string;
+  algorithm?: string;
+  algorithm_label?: string;
+  question_type?: string;
+  question_type_label?: string;
+  content_mode?: string;
+  content_mode_label?: string;
+  image_mode?: string;
+  image_mode_label?: string;
+  image_placement?: string;
+  image_placement_label?: string;
+  image_targets?: string[];
+  image_target_labels?: string[];
+}
+
 export interface GeneratedResult extends GeneratedAssets {
   question: string;
   options: string[];
   solution_steps: string[];
   ground_truth: string;
+  meta?: GeneratedRequestMeta;
+  request?: GeneratedRequestMeta;
+  image_svg?: string;
   image_code?: string;
   assets?: GeneratedAssets;
   content?: GeneratedStructuredContent;
   visual_pipeline?: VisualPipelineMeta;
 }
 
+export interface QuestionLibraryItem {
+  question_id: string;
+  portrait_id: string;
+  request_id: string;
+  subject: string;
+  knowledge_point: string;
+  difficulty: string;
+  question_type: string;
+  content_mode: string;
+  algorithm: string;
+  created_at: string;
+  updated_at: string;
+  result: GeneratedResult;
+}
+
+export interface QuestionLibraryEnvelope {
+  questions?: QuestionLibraryItem[];
+}
+
 export interface GenerationPayload {
+  subject: string;
   knowledge_point: string;
   difficulty: string;
   algorithm: string;
@@ -134,10 +175,21 @@ export interface MeEnvelope {
   uid?: string;
 }
 
+export interface PortraitAttachment {
+  id: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  data_url: string;
+}
+
 export interface PortraitMessage {
   role?: string;
   content?: string;
   created_at?: string;
+  kind?: string;
+  request_id?: string;
+  payload?: unknown;
 }
 
 export interface PortraitGuidanceEnvelope {
@@ -168,6 +220,8 @@ export interface PortraitDocumentEnvelope {
 export interface PortraitTurnEnvelope {
   portrait?: PortraitDocumentEnvelope;
   assistant_message?: string;
+  teacher_intent?: string;
+  processing?: boolean;
 }
 
 export interface PortraitListItem {
@@ -178,6 +232,8 @@ export interface PortraitListItem {
   summary?: string;
   updated_at?: string;
   created_at?: string;
+  history_updated_at?: string;
+  message_count?: number;
 }
 
 export interface PortraitListEnvelope {
@@ -244,6 +300,7 @@ export const DEFAULT_PERSISTED_STATE: PersistedWorkbenchState = {
   latestKnowledgePointDraft: "",
   latestPortraitReplyDraft: "",
   requestDraft: {
+    subject: "",
     difficulty: "2",
     algorithm: "direct",
     question_type: "multiple_choice",
@@ -255,8 +312,8 @@ export const DEFAULT_PERSISTED_STATE: PersistedWorkbenchState = {
   layout: {
     sidebarWidth: 240,
     chatPanelWidth: 3.4,
-    inspectorWidth: 300,
+    inspectorWidth: 460,
     sidebarCollapsed: false,
-    inspectorCollapsed: false,
+    inspectorCollapsed: true,
   },
 };

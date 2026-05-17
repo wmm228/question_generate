@@ -3,20 +3,26 @@ import type {
   GenerationPayload,
   OahStatusEnvelope,
   PersistedWorkbenchState,
+  PortraitAttachment,
   PortraitDocumentEnvelope,
   PortraitListItem,
+  PortraitMessage,
+  PortraitTurnEnvelope,
   ProgressSnapshot,
   QuestionAgentContractEnvelope,
+  QuestionLibraryItem,
   SpecNormalizeResponse,
   WorkbenchClientConfig,
 } from "./question-agent-workbench-types";
-import { DEFAULT_CLIENT_CONFIG } from "./question-agent-workbench-types.js";
+import { DEFAULT_CLIENT_CONFIG, DEFAULT_PERSISTED_STATE } from "./question-agent-workbench-types.js";
 import { IMAGE_TARGET_BY_PLACEMENT } from "./question-agent-workbench-types.js";
 import { WorkbenchApi } from "./question-agent-workbench-api.js";
 import {
-  loadGuestAuth,
+  loadSessionToken,
   loadWorkbenchState,
-  saveGuestAuth,
+  clearGuestAuth,
+  clearSessionToken,
+  saveSessionToken,
   saveWorkbenchState,
 } from "./question-agent-workbench-storage.js";
 import { createRequestId, getPortraitReadyState, normalizePortraitList, normalizeString, readSpecResponseFromError } from "./question-agent-workbench-utils.js";
@@ -33,6 +39,10 @@ export interface WorkbenchSessionState {
   portraitDocument: PortraitDocumentEnvelope | null;
   specNormalizeResponse: SpecNormalizeResponse | null;
   generatedResult: GeneratedResult | null;
+  questionLibraryResults: QuestionLibraryItem[];
+  questionLibraryLoading: boolean;
+  questionLibraryError: string;
+  questionLibrarySearched: boolean;
   progressSnapshot: ProgressSnapshot | null;
   currentRequestId: string;
   persisted: PersistedWorkbenchState;
@@ -45,7 +55,7 @@ export class WorkbenchSessionStore {
 
   readonly state: WorkbenchSessionState = {
     authUid: "",
-    sessionToken: "",
+    sessionToken: loadSessionToken(),
     currentUser: "",
     busy: false,
     clientConfig: DEFAULT_CLIENT_CONFIG,
@@ -55,15 +65,21 @@ export class WorkbenchSessionStore {
     portraitDocument: null,
     specNormalizeResponse: null,
     generatedResult: null,
+    questionLibraryResults: [],
+    questionLibraryLoading: false,
+    questionLibraryError: "",
+    questionLibrarySearched: false,
     progressSnapshot: null,
     currentRequestId: "",
     persisted: loadWorkbenchState(),
   };
 
   constructor() {
+    clearGuestAuth();
     this.api.setSessionToken(this.state.sessionToken);
     this.api.setUnauthorizedHandler(() => {
-      this.setSessionToken("");
+      this.clearSession();
+      this.emit();
     });
   }
 
@@ -107,6 +123,11 @@ export class WorkbenchSessionStore {
   setSessionToken(token: string): void {
     this.state.sessionToken = token;
     this.api.setSessionToken(token);
+    if (token) {
+      saveSessionToken(token);
+    } else {
+      clearSessionToken();
+    }
   }
 
   clearSession(): void {
@@ -119,70 +140,42 @@ export class WorkbenchSessionStore {
     this.state.portraitDocument = null;
     this.state.specNormalizeResponse = null;
     this.state.persisted.activePortraitId = "";
+    clearGuestAuth();
     this.persist();
   }
 
   async restoreSession(): Promise<boolean> {
-    if (this.state.sessionToken) {
-      try {
-        const me = await this.api.me();
-        this.state.currentUser = normalizeString(me.uid) || "自动会话";
-        await this.refreshWorkbenchData();
-        await this.restorePortrait();
-        this.emit();
-        return true;
-      } catch {
-        this.clearSession();
-      }
-    }
-
-    await this.bootstrapAnonymousSession();
-    return true;
-  }
-
-  private createAnonymousAuth(): { uid: string; password: string } {
-    const stored = loadGuestAuth();
-    if (stored) {
-      return stored;
-    }
-    const uid = `guest_${globalThis.crypto?.randomUUID?.().replace(/-/g, "").slice(0, 12) || Date.now().toString(36)}`;
-    const password = globalThis.crypto?.randomUUID?.().replace(/-/g, "") || `${Date.now()}${Math.random().toString(36).slice(2)}`;
-    const auth = { uid, password };
-    saveGuestAuth(auth);
-    return auth;
-  }
-
-  private async bootstrapAnonymousSession(): Promise<void> {
-    const auth = this.createAnonymousAuth();
     try {
-      const login = await this.api.login(auth.uid, auth.password);
-      this.setSessionToken(normalizeString(login.token));
-      this.state.currentUser = "自动会话";
+      const me = await this.api.me();
+      const uid = normalizeString(me.uid);
+      if (!uid || uid.startsWith("guest_")) {
+        try {
+          await this.api.logout();
+        } catch {
+          // Ignore logout errors while discarding legacy anonymous sessions.
+        }
+        this.clearSession();
+        this.emit();
+        return false;
+      }
+      this.setSessionToken(this.state.sessionToken || "bypass-session");
+      this.state.currentUser = uid;
       await this.refreshWorkbenchData();
       await this.restorePortrait();
       this.emit();
-      return;
+      return true;
     } catch {
-      // Fall through to register a local anonymous account.
+      this.clearSession();
     }
 
-    const register = await this.api.register(auth.uid, auth.password);
-    const token = normalizeString(register.token);
-    const uid = normalizeString(register.uid);
-    if (!token || !uid) {
-      throw new Error("自动会话初始化失败");
-    }
-    this.setSessionToken(token);
-    this.state.currentUser = "自动会话";
-    await this.refreshWorkbenchData();
-    await this.restorePortrait();
     this.emit();
+    return false;
   }
 
-  async authenticate(mode: "login" | "register", uid: string, password: string): Promise<void> {
+  async authenticate(mode: "login" | "register", uid: string, password: string, email = ""): Promise<void> {
     const response = mode === "login"
       ? await this.api.login(uid, password)
-      : await this.api.register(uid, password);
+      : await this.api.register(uid, password, email);
     const token = normalizeString(response.token);
     const resolvedUid = normalizeString(response.uid);
     if (!token || !resolvedUid) {
@@ -207,16 +200,28 @@ export class WorkbenchSessionStore {
   }
 
   async refreshWorkbenchData(): Promise<void> {
-    const [clientConfig, contract, oahStatus, portraitList] = await Promise.all([
+    const [clientConfig, contract, oahStatus, portraitList] = await Promise.allSettled([
       this.api.getClientConfig(),
       this.api.getContract(),
       this.api.getOahStatus(),
       this.api.listPortraits(),
     ]);
-    this.state.clientConfig = clientConfig;
-    this.state.contractEnvelope = contract;
-    this.state.oahStatus = oahStatus;
-    this.state.portraitList = normalizePortraitList(portraitList.portraits);
+    if (clientConfig.status === "fulfilled") {
+      this.state.clientConfig = clientConfig.value;
+    }
+    if (contract.status === "fulfilled") {
+      this.state.contractEnvelope = contract.value;
+    }
+    this.state.oahStatus = oahStatus.status === "fulfilled"
+      ? oahStatus.value
+      : {
+        ok: false,
+        status: "unavailable",
+        error: oahStatus.reason instanceof Error ? oahStatus.reason.message : "OAH 状态暂不可用",
+      };
+    if (portraitList.status === "fulfilled") {
+      this.state.portraitList = normalizePortraitList(portraitList.value.portraits);
+    }
     this.emit();
   }
 
@@ -228,7 +233,15 @@ export class WorkbenchSessionStore {
       this.emit();
       return;
     }
-    await this.loadPortrait(portraitId, false);
+    try {
+      await this.loadPortrait(portraitId, false);
+    } catch {
+      this.state.portraitDocument = null;
+      this.state.specNormalizeResponse = null;
+      this.state.persisted.activePortraitId = "";
+      this.persist();
+      this.emit();
+    }
   }
 
   startNewPortraitDraft(): void {
@@ -237,6 +250,18 @@ export class WorkbenchSessionStore {
     this.state.specNormalizeResponse = null;
     this.state.persisted.activePortraitId = "";
     this.state.persisted.latestPortraitReplyDraft = "";
+    this.persist();
+    this.emit();
+  }
+
+  startNewRequestDraft(): void {
+    this.resetGenerationState();
+    this.state.portraitDocument = null;
+    this.state.specNormalizeResponse = null;
+    this.state.persisted.activePortraitId = "";
+    this.state.persisted.latestKnowledgePointDraft = "";
+    this.state.persisted.latestPortraitReplyDraft = "";
+    this.state.persisted.requestDraft = structuredClone(DEFAULT_PERSISTED_STATE.requestDraft);
     this.persist();
     this.emit();
   }
@@ -261,20 +286,73 @@ export class WorkbenchSessionStore {
     this.emit();
   }
 
-  setKnowledgePointDraft(value: string): void {
+  async archivePortrait(portraitId: string): Promise<void> {
+    const normalizedPortraitId = normalizeString(portraitId);
+    if (!normalizedPortraitId) {
+      return;
+    }
+    await this.api.archivePortrait(normalizedPortraitId);
+    const activePortraitId = normalizeString(this.state.portraitDocument?.portrait_id || this.state.persisted.activePortraitId);
+    if (activePortraitId === normalizedPortraitId) {
+      this.resetGenerationState();
+      this.state.portraitDocument = null;
+      this.state.specNormalizeResponse = null;
+      this.state.persisted.activePortraitId = "";
+      this.state.persisted.latestPortraitReplyDraft = "";
+    }
+    await this.refreshPortraitList();
+    this.persist();
+    this.emit();
+  }
+
+  private async refreshPortraitDocument(portraitId: string): Promise<void> {
+    const response = await this.api.getPortrait(portraitId);
+    if (!response.portrait) {
+      return;
+    }
+    this.state.portraitDocument = response.portrait;
+    this.state.persisted.activePortraitId = normalizeString(response.portrait.portrait_id);
+    this.syncPortraitSpecState();
+    this.applyPortraitDraftToRequestDraft();
+    await this.refreshPortraitList();
+    this.persist();
+    this.emit();
+  }
+
+  async refreshActivePortrait(): Promise<void> {
+    const portraitId = normalizeString(this.state.portraitDocument?.portrait_id || this.state.persisted.activePortraitId);
+    if (!portraitId) {
+      return;
+    }
+    await this.refreshPortraitDocument(portraitId);
+  }
+
+  setKnowledgePointDraft(value: string, notify = true): void {
     this.state.persisted.latestKnowledgePointDraft = value;
     this.state.persisted.requestDraft.knowledge_point = value;
     this.persist();
-    this.emit();
+    if (notify) {
+      this.emit();
+    }
   }
 
-  setPortraitReplyDraft(value: string): void {
+  setSubjectDraft(value: string, notify = true): void {
+    this.state.persisted.requestDraft.subject = value;
+    this.persist();
+    if (notify) {
+      this.emit();
+    }
+  }
+
+  setPortraitReplyDraft(value: string, notify = true): void {
     this.state.persisted.latestPortraitReplyDraft = value;
     this.persist();
-    this.emit();
+    if (notify) {
+      this.emit();
+    }
   }
 
-  updateRequestDraft(patch: Partial<GenerationPayload>): void {
+  updateRequestDraft(patch: Partial<GenerationPayload>, notify = true): void {
     this.state.persisted.requestDraft = {
       ...this.state.persisted.requestDraft,
       ...patch,
@@ -293,7 +371,9 @@ export class WorkbenchSessionStore {
     }
 
     this.persist();
-    this.emit();
+    if (notify) {
+      this.emit();
+    }
   }
 
   syncPortraitToDraft(): void {
@@ -311,6 +391,7 @@ export class WorkbenchSessionStore {
     }
     this.state.persisted.latestKnowledgePointDraft = normalizeString(draft.knowledge_point);
     this.state.persisted.requestDraft = {
+      subject: normalizeString(draft.subject),
       knowledge_point: normalizeString(draft.knowledge_point),
       difficulty: normalizeString(draft.difficulty) || "2",
       algorithm: normalizeString(draft.algorithm) || "direct",
@@ -323,8 +404,8 @@ export class WorkbenchSessionStore {
     return true;
   }
 
-  async startPortraitDialogue(message: string): Promise<void> {
-    const response = await this.api.startPortrait(message);
+  async startPortraitDialogue(message: string, attachments: PortraitAttachment[] = []): Promise<PortraitTurnEnvelope> {
+    const response = await this.api.startPortrait(message, attachments);
     this.resetGenerationState();
     this.state.portraitDocument = response.portrait || null;
     this.state.persisted.activePortraitId = normalizeString(this.state.portraitDocument?.portrait_id);
@@ -334,14 +415,15 @@ export class WorkbenchSessionStore {
     this.applyPortraitDraftToRequestDraft();
     this.persist();
     this.emit();
+    return response;
   }
 
-  async sendPortraitReply(message: string): Promise<void> {
+  async sendPortraitReply(message: string, attachments: PortraitAttachment[] = []): Promise<PortraitTurnEnvelope> {
     const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
     if (!portraitId) {
       throw new Error("请先开始规范对话。");
     }
-    const response = await this.api.replyPortrait(portraitId, message);
+    const response = await this.api.replyPortrait(portraitId, message, attachments);
     this.resetGenerationState();
     this.state.portraitDocument = response.portrait || null;
     this.state.persisted.latestPortraitReplyDraft = "";
@@ -350,6 +432,7 @@ export class WorkbenchSessionStore {
     this.applyPortraitDraftToRequestDraft();
     this.persist();
     this.emit();
+    return response;
   }
 
   private syncPortraitSpecState(): void {
@@ -363,9 +446,42 @@ export class WorkbenchSessionStore {
     this.state.portraitList = normalizePortraitList(portraitList.portraits);
   }
 
+  private async appendPortraitHistoryMessage(message: PortraitMessage): Promise<void> {
+    const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
+    if (!portraitId) {
+      return;
+    }
+    const response = await this.api.appendPortraitHistory(portraitId, {
+      role: normalizeString(message.role) || "assistant",
+      kind: normalizeString(message.kind) || "text",
+      content: normalizeString(message.content),
+      request_id: normalizeString(message.request_id),
+      payload: message.payload,
+    });
+    if (response.portrait) {
+      this.state.portraitDocument = response.portrait;
+      this.syncPortraitSpecState();
+      await this.refreshPortraitList();
+      this.persist();
+      this.emit();
+    }
+  }
+
+  hasGeneratedQuestionMessage(requestId: string): boolean {
+    const normalizedRequestId = normalizeString(requestId);
+    if (!normalizedRequestId) {
+      return false;
+    }
+    return (this.state.portraitDocument?.messages || []).some((message) => (
+      normalizeString(message.kind) === "generated_question"
+      && normalizeString(message.request_id) === normalizedRequestId
+    ));
+  }
+
   buildPayload(): GenerationPayload {
     const requestDraft = this.state.persisted.requestDraft;
     return {
+      subject: normalizeString(requestDraft.subject),
       knowledge_point: normalizeString(requestDraft.knowledge_point),
       difficulty: normalizeString(requestDraft.difficulty) || "2",
       algorithm: normalizeString(requestDraft.algorithm) || "direct",
@@ -377,12 +493,30 @@ export class WorkbenchSessionStore {
     };
   }
 
-  async validateSpec(): Promise<void> {
+  async validateSpec(): Promise<SpecNormalizeResponse> {
     const requestId = createRequestId();
     this.state.currentRequestId = requestId;
     const payload = this.buildPayload();
+    const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
     try {
-      this.state.specNormalizeResponse = await this.api.normalizeSpec(payload as unknown as Record<string, unknown>, requestId);
+      let normalizeResponse: SpecNormalizeResponse;
+      if (portraitId) {
+        const response = await this.api.commitPortraitSpec(portraitId, payload as unknown as Record<string, unknown>, requestId);
+        normalizeResponse = {
+          spec: response.spec || {},
+          plan: response.plan || {},
+        };
+        this.state.specNormalizeResponse = normalizeResponse;
+        if (response.portrait) {
+          this.state.portraitDocument = response.portrait;
+          this.state.persisted.activePortraitId = normalizeString(response.portrait.portrait_id);
+          await this.refreshPortraitList();
+        }
+      } else {
+        normalizeResponse = await this.api.normalizeSpec(payload as unknown as Record<string, unknown>, requestId);
+        this.state.specNormalizeResponse = normalizeResponse;
+      }
+      return normalizeResponse;
     } catch (error) {
       this.state.specNormalizeResponse = readSpecResponseFromError(error);
       throw error;
@@ -393,13 +527,40 @@ export class WorkbenchSessionStore {
 
   async generateQuestion(): Promise<void> {
     const requestId = createRequestId();
+    const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
     this.state.currentRequestId = requestId;
     this.state.generatedResult = null;
     this.state.progressSnapshot = null;
     this.emit();
     this.startProgressPolling(requestId);
     try {
-      this.state.generatedResult = await this.api.generate(this.buildPayload() as unknown as Record<string, unknown>, requestId);
+      const requestPayload = {
+        ...(this.buildPayload() as unknown as Record<string, unknown>),
+        ...(portraitId ? { portrait_id: portraitId } : {}),
+      };
+      const result = await this.api.generate(requestPayload, requestId);
+      this.state.generatedResult = result;
+      if (portraitId) {
+        try {
+          await this.refreshPortraitDocument(portraitId);
+        } catch {
+          // The generated result remains visible even if portrait refresh fails.
+        }
+        if (!this.hasGeneratedQuestionMessage(requestId)) {
+          try {
+            await this.appendPortraitHistoryMessage({
+              role: "assistant",
+              kind: "generated_question",
+              content: "已生成题目。",
+              request_id: requestId,
+              payload: result,
+              created_at: new Date().toISOString(),
+            });
+          } catch {
+            // The generated result remains visible even if history persistence fails.
+          }
+        }
+      }
     } catch (error) {
       this.state.specNormalizeResponse = readSpecResponseFromError(error);
       throw error;
@@ -412,9 +573,9 @@ export class WorkbenchSessionStore {
 
   private startProgressPolling(requestId: string): void {
     this.stopProgressPolling();
-    void this.fetchProgressSnapshot(requestId, false);
+    void this.fetchProgressSnapshot(requestId, true);
     this.progressTimerId = window.setInterval(() => {
-      void this.fetchProgressSnapshot(requestId, false);
+      void this.fetchProgressSnapshot(requestId, true);
     }, 1000);
   }
 
@@ -436,10 +597,74 @@ export class WorkbenchSessionStore {
       if (silent404 && error instanceof Error && "status" in error && (error as { status?: number }).status === 404) {
         return;
       }
-      if (!silent404) {
-        this.stopProgressPolling();
-      }
+      this.stopProgressPolling();
+      this.emit();
     }
+  }
+
+  async downloadPortraitExport(format: string): Promise<Blob> {
+    const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
+    if (!portraitId) {
+      throw new Error("请先新建或打开规范对话。");
+    }
+    return this.api.downloadPortraitExport(portraitId, format);
+  }
+
+  async downloadQuestionExport(requestId: string, format: string, portraitIdOverride = ""): Promise<Blob> {
+    const portraitId = normalizeString(portraitIdOverride) || normalizeString(this.state.portraitDocument?.portrait_id);
+    if (!portraitId) {
+      throw new Error("请先新建或打开规范对话。");
+    }
+    return this.api.downloadQuestionExport(portraitId, requestId, format);
+  }
+
+  async submitQuestionFeedback(requestId: string, score: number, question: GeneratedResult | null): Promise<void> {
+    const normalizedRequestId = normalizeString(requestId);
+    if (!normalizedRequestId) {
+      throw new Error("缺少题目 request_id，无法记录反馈。");
+    }
+    const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
+    await this.api.submitQuestionFeedback({
+      request_id: normalizedRequestId,
+      ...(portraitId ? { portrait_id: portraitId } : {}),
+      score,
+      question,
+      context: {
+        submitted_at: new Date().toISOString(),
+      },
+    });
+  }
+
+  async searchQuestionLibrary(filters: GenerationPayload): Promise<void> {
+    this.state.questionLibraryLoading = true;
+    this.state.questionLibraryError = "";
+    this.state.questionLibrarySearched = true;
+    this.emit();
+    try {
+      const response = await this.api.searchQuestionLibrary({
+        subject: filters.subject,
+        knowledge_point: filters.knowledge_point,
+        difficulty: filters.difficulty,
+        question_type: filters.question_type,
+        content_mode: filters.content_mode,
+        algorithm: filters.algorithm,
+      });
+      this.state.questionLibraryResults = Array.isArray(response.questions) ? response.questions : [];
+    } catch (error) {
+      this.state.questionLibraryResults = [];
+      this.state.questionLibraryError = error instanceof Error ? error.message : "题库搜索失败";
+    } finally {
+      this.state.questionLibraryLoading = false;
+      this.emit();
+    }
+  }
+
+  clearQuestionLibrarySearch(): void {
+    this.state.questionLibraryResults = [];
+    this.state.questionLibraryLoading = false;
+    this.state.questionLibraryError = "";
+    this.state.questionLibrarySearched = false;
+    this.emit();
   }
 
   getGenerateAvailability(): {
@@ -448,8 +673,10 @@ export class WorkbenchSessionStore {
     specReady: boolean;
   } {
     const readyState = getPortraitReadyState(this.state.portraitDocument);
+    const hasSubject = Boolean(normalizeString(this.state.persisted.requestDraft.subject));
+    const hasKnowledgePoint = Boolean(normalizeString(this.state.persisted.requestDraft.knowledge_point));
     return {
-      canGenerate: readyState.portraitReady && readyState.specReady && !this.state.busy,
+      canGenerate: !this.state.busy && hasSubject && hasKnowledgePoint,
       portraitReady: readyState.portraitReady,
       specReady: readyState.specReady,
     };

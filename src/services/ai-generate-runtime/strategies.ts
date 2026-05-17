@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 
 import {
+  buildPromptSpecJson,
+  isRecord,
   normalizeString,
   normalizeStringArray,
   type AiGenerateRuntime,
@@ -12,13 +14,6 @@ import type {
   NormalizedEvaluationPayload,
   NormalizedRawGeneratedPayload,
 } from "./types";
-
-interface EqprProcessAudit {
-  solvable: boolean;
-  issues: string[];
-  refine_instructions: string;
-  answer_path: string[];
-}
 
 interface ValidatedDraftOptions {
   initialMessage: string;
@@ -34,6 +29,25 @@ interface ValidatedDraftOptions {
   ) => string;
 }
 
+interface DearBranch {
+  draft: DraftArtifact;
+  rationale: string;
+  score: number;
+  goal: string;
+}
+
+interface EqprNode {
+  id: string;
+  thought: string;
+  parent: EqprNode | null;
+  children: EqprNode[];
+  rewards: number[];
+  reward: number;
+  visited: number;
+  depth: number;
+  isTerminal: boolean;
+}
+
 export interface RunEvoqPopulationOptions {
   seedStrategies?: string[];
   mutationRounds?: number;
@@ -44,6 +58,21 @@ export interface RunEvoqPopulationResult {
   candidates: EvoqPopulationCandidate[];
   best: EvoqPopulationCandidate;
 }
+
+const DEAR_BRANCH_COUNT = 2;
+const DEAR_SCORE_THRESHOLD = 7;
+const DEAR_MAX_ITERATIONS = 3;
+const EQPR_EXPAND_WIDTH = 2;
+const EQPR_ITERATIONS = 3;
+const EQPR_MAX_DEPTH = 3;
+const EQPR_MIN_DEPTH = 2;
+const EQPR_W_EXP = 2.5;
+const EQPR_SIMULATE_EXPAND_WIDTH = 1;
+const EVOQ_DEFAULT_POPULATION_SIZE = 3;
+const EVOQ_DEFAULT_GENERATIONS = 3;
+const EVOQ_ELITE_RATIO = 0.5;
+const EVOQ_LAMBDA_RATIO = 1.0;
+const EVOQ_TOURNAMENT_K = 2;
 
 function readNumber(value: unknown, fallback: number): number {
   const parsed = typeof value === "number" ? value : Number.parseFloat(normalizeString(value));
@@ -58,184 +87,34 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function serializeRecord(value: Record<string, unknown>): string {
-  return JSON.stringify(value, null, 2);
+function clampTenPointScore(value: number): number {
+  return Math.max(1, Math.min(10, Math.round(value)));
 }
 
-function buildEmptyEvaluation(): string {
-  return JSON.stringify(
-    {
-      passed: true,
-      issues: [],
-      revision_instructions: "",
-    },
-    null,
-    2,
-  );
+function serializeRecord(value: Record<string, unknown>): string {
+  return JSON.stringify(value, null, 2);
 }
 
 function joinIssues(issues: string[]): string {
   return issues.filter(Boolean).join("；");
 }
 
-function normalizeMatchText(value: string): string {
-  return normalizeString(value).toLowerCase();
-}
-
-function buildKnowledgeIndicators(knowledgePoint: string): string[] {
-  const normalized = normalizeMatchText(knowledgePoint);
-  const indicators = new Set<string>();
-
-  for (const sequence of normalized.match(/[\u4e00-\u9fff]{2,}/g) || []) {
-    indicators.add(sequence);
-
-    if (sequence.length >= 4) {
-      for (let index = 0; index <= sequence.length - 2; index += 1) {
-        indicators.add(sequence.slice(index, index + 2));
-      }
-    }
-
-    if (sequence.length >= 6) {
-      for (let index = 0; index <= sequence.length - 3; index += 1) {
-        indicators.add(sequence.slice(index, index + 3));
-      }
-    }
-  }
-
-  for (const token of normalized.match(/[a-z0-9]+/g) || []) {
-    if (token.length >= 3) {
-      indicators.add(token);
-    }
-  }
-
-  return [...indicators].filter((item) => item.length >= 2);
-}
-
-function buildRequiredAnchorGroups(knowledgePoint: string): string[][] {
-  const normalized = normalizeMatchText(knowledgePoint);
-  const groups: string[][] = [];
-
-  const pushGroup = (...terms: string[]): void => {
-    const normalizedTerms = terms.map((term) => normalizeMatchText(term)).filter(Boolean);
-    if (normalizedTerms.length > 0) {
-      groups.push(normalizedTerms);
-    }
-  };
-
-  if (normalized.includes("图像性质")) {
-    pushGroup("图像");
-    pushGroup("性质", "斜率", "截距", "交点", "增减", "象限", "位置");
-  } else {
-    if (normalized.includes("图像")) {
-      pushGroup("图像");
-    }
-    if (normalized.includes("性质")) {
-      pushGroup("性质", "特点", "特征");
-    }
-  }
-
-  if (normalized.includes("斜率")) {
-    pushGroup("斜率", "k");
-  }
-  if (normalized.includes("截距")) {
-    pushGroup("截距");
-  }
-  if (normalized.includes("定义域")) {
-    pushGroup("定义域");
-  }
-  if (normalized.includes("值域")) {
-    pushGroup("值域");
-  }
-  if (normalized.includes("单调")) {
-    pushGroup("单调", "增减");
-  }
-  if (normalized.includes("最值")) {
-    pushGroup("最值", "最大值", "最小值");
-  }
-  if (normalized.includes("对称")) {
-    pushGroup("对称", "对称轴");
-  }
-  if (normalized.includes("平移")) {
-    pushGroup("平移");
-  }
-  if (normalized.includes("应用")) {
-    pushGroup("应用", "实际");
-  }
-
-  return groups;
-}
-
-function countKnowledgeIndicatorMatches(knowledgePoint: string, draftText: string): number {
-  const normalizedDraftText = normalizeMatchText(draftText);
-  if (!normalizedDraftText) {
-    return 0;
-  }
-
-  const indicators = buildKnowledgeIndicators(knowledgePoint);
-  if (indicators.length === 0) {
-    return 0;
-  }
-
-  return indicators.filter((indicator) => normalizedDraftText.includes(indicator)).length;
-}
-
-function buildLocalDraftEvaluation(
-  runtime: AiGenerateRuntime,
-  draft: DraftArtifact,
-): NormalizedEvaluationPayload {
-  const issues: string[] = [];
-  const combinedDraftText = [
-    draft.raw.question,
-    ...draft.raw.solution_steps,
-    draft.raw.ground_truth,
-  ].join("\n");
-
-  const matchedIndicators = countKnowledgeIndicatorMatches(runtime.payload.knowledge_point, combinedDraftText);
-  if (matchedIndicators < 2) {
-    issues.push(`生成结果对已确认知识点“${runtime.payload.knowledge_point}”的聚焦程度不足。`);
-  }
-
-  const normalizedDraftText = normalizeMatchText(combinedDraftText);
-  for (const group of buildRequiredAnchorGroups(runtime.payload.knowledge_point)) {
-    const matched = group.some((term) => normalizedDraftText.includes(term));
-    if (!matched) {
-      issues.push(
-        `生成结果缺少知识点“${runtime.payload.knowledge_point}”对应的显式子能力锚点，至少应覆盖以下之一：${group.join("、")}。`,
-      );
-    }
-  }
-
-  return {
-    passed: issues.length === 0,
-    issues,
-    revision_instructions:
-      issues.length > 0
-        ? `请重新生成题目，使题干与解析都显式聚焦“${runtime.payload.knowledge_point}”，覆盖必要的子能力表述，并删除无关内容。`
-        : "",
-  };
-}
-
-function mergeEvaluations(
-  primary: NormalizedEvaluationPayload,
-  secondary: NormalizedEvaluationPayload,
-): NormalizedEvaluationPayload {
-  if (primary.passed && secondary.passed) {
-    return primary;
-  }
-
-  const issues = [...primary.issues, ...secondary.issues];
-  return {
-    passed: false,
-    issues,
-    revision_instructions: [primary.revision_instructions, secondary.revision_instructions]
-      .filter(Boolean)
-      .join(" "),
-  };
+function joinFeedbackInstructions(evaluation: NormalizedEvaluationPayload): string {
+  return [
+    evaluation.revision_instructions,
+    evaluation.algorithm_feedback.rethink_instructions,
+    evaluation.algorithm_feedback.mutation_instructions,
+    evaluation.algorithm_feedback.next_action_hint,
+    joinIssues(evaluation.issues),
+  ].filter(Boolean).join(" ");
 }
 
 function compareCandidates(left: EvoqPopulationCandidate, right: EvoqPopulationCandidate): number {
   if (left.review.passed !== right.review.passed) {
     return left.review.passed ? -1 : 1;
+  }
+  if (left.review.fitness !== right.review.fitness) {
+    return right.review.fitness - left.review.fitness;
   }
   if (left.review.score !== right.review.score) {
     return right.review.score - left.review.score;
@@ -243,41 +122,33 @@ function compareCandidates(left: EvoqPopulationCandidate, right: EvoqPopulationC
   return left.review.issues.length - right.review.issues.length;
 }
 
-function defaultEvoqSeedStrategies(contentMode: AiGenerateRuntime["payload"]["content_mode"]): string[] {
-  const baseStrategies = [
-    "在保证答案唯一明确的前提下，尽量提升干扰项质量。",
-    "保持题干精炼，但让解题过程具备清晰的多步推理。",
-    "强化概念区分度，让不同掌握水平的学生明显拉开差距。",
-  ];
-
-  if (contentMode === "image") {
-    return ["让配图成为正确作答不可替代的信息来源。", ...baseStrategies];
-  }
-
-  return baseStrategies;
-}
-
-function parseEqprProcessAudit(runtime: AiGenerateRuntime, content: string): EqprProcessAudit {
-  const parsed = runtime.parseJsonRecord(content, "EQPR 过程审查");
+function buildGeneratorBindings(runtime: AiGenerateRuntime, extra: Record<string, string> = {}): Record<string, string> {
   return {
-    solvable: readBoolean(parsed.solvable, false),
-    issues: normalizeStringArray(parsed.issues),
-    refine_instructions: normalizeString(parsed.refine_instructions),
-    answer_path: normalizeStringArray(parsed.answer_path),
+    spec_json: buildPromptSpecJson(runtime.specContext.spec),
+    subject: runtime.payload.subject,
+    knowledge_id: runtime.payload.knowledge_point,
+    difficulty_target: runtime.payload.difficulty,
+    generation_constraints: runtime.algorithmPrompt,
+    few_shots: "当前 Tutor 请求未提供 few-shot 示例。",
+    ...extra,
   };
 }
 
-function parseEvoqReview(runtime: AiGenerateRuntime, content: string): EvoqCandidateReview {
-  const parsed = runtime.parseJsonRecord(content, "EvoQ 候选评审");
-  const issues = normalizeStringArray(parsed.issues);
-  const mutationInstructions = normalizeString(parsed.mutation_instructions) || joinIssues(issues);
-
+function buildReferenceLikeItemJson(candidate: EvoqPopulationCandidate): Record<string, unknown> {
   return {
-    passed: readBoolean(parsed.passed, false),
-    score: clampScore(readNumber(parsed.score, 0)),
-    strengths: normalizeStringArray(parsed.strengths),
-    issues,
-    mutation_instructions: mutationInstructions,
+    id: candidate.id,
+    stem: candidate.raw.question,
+    options: candidate.raw.options
+      ? {
+          A: candidate.raw.options[0] || "",
+          B: candidate.raw.options[1] || "",
+          C: candidate.raw.options[2] || "",
+          D: candidate.raw.options[3] || "",
+        }
+      : {},
+    answer: candidate.raw.ground_truth,
+    analysis: candidate.raw.solution_steps.join("\n"),
+    reflection: candidate.review,
   };
 }
 
@@ -294,10 +165,7 @@ async function runValidatedDraft(
 
   const initialContent = await runtime.callGenerator(options.initialMessage, options.initialStageKey);
   let draft = runtime.parseDraft(initialContent);
-  const initialEvaluation = mergeEvaluations(
-    await runtime.evaluateDraftWithRetry(draft.draftJson, options.evaluationStageKey),
-    buildLocalDraftEvaluation(runtime, draft),
-  );
+  const initialEvaluation = await runtime.evaluateDraftWithRetry(draft.draftJson, options.evaluationStageKey);
 
   if (initialEvaluation.passed) {
     return draft;
@@ -306,8 +174,8 @@ async function runValidatedDraft(
   runtime.updateProgress({
     stage: "evaluate",
     state: "active",
-    detail: "远程评估与本地约束检查均认为草稿需要修订。",
-    log: `修订要求：${initialEvaluation.revision_instructions || joinIssues(initialEvaluation.issues)}`,
+    detail: "草稿需要按评估反馈修订。",
+    log: `修订要求：${joinFeedbackInstructions(initialEvaluation)}`,
   });
 
   const generationConstraints = options.generationConstraints || runtime.algorithmPrompt;
@@ -329,258 +197,467 @@ async function runValidatedDraft(
   );
   draft = runtime.parseDraft(revisedContent);
 
-  const reEvaluation = mergeEvaluations(
-    await runtime.evaluateDraftWithRetry(draft.draftJson, `${options.evaluationStageKey}-retry`),
-    buildLocalDraftEvaluation(runtime, draft),
-  );
+  const reEvaluation = await runtime.evaluateDraftWithRetry(draft.draftJson, `${options.evaluationStageKey}-retry`);
 
   if (!reEvaluation.passed) {
     throw new Error(
-      `AI 评估在修订后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || "未知问题"}`,
+      `AI 评估在修订后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || reEvaluation.algorithm_feedback.summary || "未知问题"}`,
     );
   }
 
   return draft;
 }
 
-async function executeDirectStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
+async function runSinglePromptBaseline(
+  runtime: AiGenerateRuntime,
+  stageKey: string,
+  initialDetail: string,
+  revisionDetail: string,
+): Promise<NormalizedRawGeneratedPayload> {
   const draft = await runValidatedDraft(runtime, {
     initialMessage: runtime.buildGeneratorMessage(runtime.algorithmPrompt),
-    initialStageKey: "direct-generate",
-    initialDetail: "正在生成直接出题草稿。",
-    evaluationStageKey: "direct-evaluate",
-    revisionStageKey: "direct-revise",
-    revisionDetail: "正在根据评估反馈修订直接出题草稿。",
+    initialStageKey: stageKey,
+    initialDetail,
+    evaluationStageKey: `${stageKey}-evaluate`,
+    revisionStageKey: `${stageKey}-revise`,
+    revisionDetail,
   });
   return draft.raw;
+}
+
+async function executeDirectStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
+  return runSinglePromptBaseline(
+    runtime,
+    "direct-generate",
+    "正在按 EvoQ Direct 基线生成单次草稿。",
+    "正在根据评估反馈修订 Direct 草稿。",
+  );
 }
 
 async function executeCotStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
-  runtime.updateProgress({
-    stage: "generate",
-    state: "active",
-    detail: "正在规划分步推理的控制结构。",
-    log: "正在调用 COT 规划阶段。",
-  });
-
-  const planContent = await runtime.callGenerator(
-    runtime.buildPrompt("algorithms/cot-plan.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      algorithm_constraints: runtime.algorithmPrompt,
-    }),
-    "cot-plan",
+  return runSinglePromptBaseline(
+    runtime,
+    "cot-generate",
+    "正在按 EvoQ CoT 基线生成含设计思路的草稿。",
+    "正在根据评估反馈修订 CoT 草稿。",
   );
-  const planJson = runtime.extractJsonObject(planContent);
-  const cotConstraints = `${runtime.algorithmPrompt}\n\n已批准的推理规划：\n${planJson}`;
-
-  const draft = await runValidatedDraft(runtime, {
-    initialMessage: runtime.buildPrompt("algorithms/cot-draft.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      plan_json: planJson,
-      generation_constraints: cotConstraints,
-    }),
-    initialStageKey: "cot-draft",
-    initialDetail: "正在根据推理规划生成 COT 草稿。",
-    evaluationStageKey: "cot-evaluate",
-    revisionStageKey: "cot-revise",
-    revisionDetail: "正在在保留推理规划的前提下修订 COT 草稿。",
-    generationConstraints: cotConstraints,
-  });
-
-  return draft.raw;
 }
 
 async function executeReactStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
-  runtime.updateProgress({
-    stage: "generate",
-    state: "active",
-    detail: "正在规划 ReAct 出题循环。",
-    log: "正在调用 ReAct 规划阶段。",
-  });
-
-  const planContent = await runtime.callGenerator(
-    runtime.buildPrompt("algorithms/react-plan.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      algorithm_constraints: runtime.algorithmPrompt,
-    }),
-    "react-plan",
+  return runSinglePromptBaseline(
+    runtime,
+    "react-generate",
+    "正在按 EvoQ ReAct 基线生成 Thought-Action 草稿。",
+    "正在根据评估反馈修订 ReAct 草稿。",
   );
-  const planJson = runtime.extractJsonObject(planContent);
+}
 
-  const draft = await runValidatedDraft(runtime, {
-    initialMessage: runtime.buildPrompt("algorithms/react-draft.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      plan_json: planJson,
-      generation_constraints: runtime.algorithmPrompt,
-    }),
-    initialStageKey: "react-draft",
-    initialDetail: "正在生成 ReAct 草稿。",
-    evaluationStageKey: "react-evaluate",
-    revisionStageKey: "react-revise",
-    revisionDetail: "正在根据评估观察结果修订 ReAct 草稿。",
-    buildRevisionMessage: (draftArtifact, evaluation) =>
-      runtime.buildPrompt("algorithms/react-revision.md", {
-        spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-        plan_json: planJson,
-        draft_json: draftArtifact.draftJson,
-        evaluation_json: JSON.stringify(evaluation, null, 2),
-        generation_constraints: runtime.algorithmPrompt,
-      }),
-  });
+function parseDearGoals(runtime: AiGenerateRuntime, content: string): string[] {
+  const parsed = runtime.parseJsonRecord(content, "DeAR 分解结果");
+  const rawGoals = Array.isArray(parsed.sub_goals) ? parsed.sub_goals : [];
+  return rawGoals
+    .map((goal) => isRecord(goal) || Array.isArray(goal) ? JSON.stringify(goal) : normalizeString(goal))
+    .filter(Boolean)
+    .slice(0, DEAR_BRANCH_COUNT);
+}
 
-  return draft.raw;
+async function analyzeDearGoal(
+  runtime: AiGenerateRuntime,
+  goal: string,
+  index: number,
+): Promise<DearBranch | null> {
+  const content = await runtime.callGenerator(
+    runtime.buildPrompt("algorithms/dear-analyze.md", buildGeneratorBindings(runtime, {
+      plan_json: goal,
+    })),
+    `dear-analyze-${index + 1}`,
+  );
+
+  try {
+    const parsed = runtime.parseJsonRecord(content, "DeAR 分支分析");
+    const item = isRecord(parsed.item) ? parsed.item : parsed;
+    const draft = runtime.parseDraft(JSON.stringify(item));
+    const selfAnalysis = normalizeString(parsed.self_analysis);
+    const score = clampTenPointScore(readNumber(parsed.score, 1));
+    return {
+      draft,
+      goal,
+      rationale: selfAnalysis || "DeAR 分支分析未返回自评说明。",
+      score,
+    };
+  } catch (error) {
+    runtime.updateProgress({
+      stage: "generate",
+      state: "active",
+      detail: `DeAR 分支 ${index + 1} 解析失败，已跳过。`,
+      log: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function rethinkDearDraft(
+  runtime: AiGenerateRuntime,
+  branch: DearBranch,
+  rationale: string,
+  stageKey: string,
+): Promise<DearBranch> {
+  const content = await runtime.callGenerator(
+    runtime.buildPrompt("algorithms/dear-rethink.md", buildGeneratorBindings(runtime, {
+      prev_item_json: branch.draft.draftJson,
+      prev_rationale: branch.rationale,
+      new_rationale: rationale,
+    })),
+    stageKey,
+  );
+  const draft = runtime.parseDraft(content);
+  return {
+    draft,
+    goal: branch.goal,
+    rationale,
+    score: clampTenPointScore(branch.score + 1),
+  };
 }
 
 async function executeDearStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
   runtime.updateProgress({
     stage: "generate",
     state: "active",
-    detail: "正在为 DeAR 分解目标概念。",
-    log: "正在调用 DeAR 分解阶段。",
+    detail: "正在按 EvoQ DeAR 基线分解多个设计方向。",
+    log: "正在调用 DeAR decompose。",
   });
 
   const decompositionContent = await runtime.callGenerator(
-    runtime.buildPrompt("algorithms/dear-decompose.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      algorithm_constraints: runtime.algorithmPrompt,
-    }),
+    runtime.buildPrompt("algorithms/dear-decompose.md", buildGeneratorBindings(runtime, {
+      plan_count: String(DEAR_BRANCH_COUNT),
+    })),
     "dear-decompose",
   );
-  const decompositionJson = runtime.extractJsonObject(decompositionContent);
+  const goals = parseDearGoals(runtime, decompositionContent);
+  if (goals.length === 0) {
+    throw new Error("DeAR 未产出可执行的设计子目标");
+  }
 
-  const draft = await runValidatedDraft(runtime, {
-    initialMessage: runtime.buildPrompt("algorithms/dear-draft.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      decomposition_json: decompositionJson,
-      generation_constraints: runtime.algorithmPrompt,
-    }),
-    initialStageKey: "dear-draft",
-    initialDetail: "正在根据分解结果生成 DeAR 草稿。",
-    evaluationStageKey: "dear-evaluate",
-    revisionStageKey: "dear-rethink",
-    revisionDetail: "正在根据评估分析重新思考并修订 DeAR 草稿。",
-    buildRevisionMessage: (draftArtifact, evaluation) =>
-      runtime.buildPrompt("algorithms/dear-rethink.md", {
-        spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-        decomposition_json: decompositionJson,
-        draft_json: draftArtifact.draftJson,
-        evaluation_json: JSON.stringify(evaluation, null, 2),
-        generation_constraints: runtime.algorithmPrompt,
-      }),
+  const branches: DearBranch[] = [];
+  for (const [index, goal] of goals.entries()) {
+    runtime.updateProgress({
+      stage: "generate",
+      state: "active",
+      detail: `正在分析 DeAR 分支 ${index + 1}/${goals.length}。`,
+      log: goal,
+    });
+    const branch = await analyzeDearGoal(runtime, goal, index);
+    if (branch) {
+      branches.push(branch);
+    }
+    if (branch && branch.score >= DEAR_SCORE_THRESHOLD) {
+      break;
+    }
+  }
+
+  const initialBest = branches.sort((left, right) => right.score - left.score)[0];
+  if (!initialBest) {
+    throw new Error("DeAR 所有分支均未生成可解析题目");
+  }
+
+  let best = initialBest;
+  for (let iteration = 0; best.score < DEAR_SCORE_THRESHOLD && iteration < DEAR_MAX_ITERATIONS; iteration += 1) {
+    runtime.updateProgress({
+      stage: "generate",
+      state: "active",
+      detail: `DeAR 最优分支分数 ${best.score}/10，正在执行第 ${iteration + 1} 次 Rethink。`,
+      log: best.rationale,
+    });
+    best = await rethinkDearDraft(
+      runtime,
+      best,
+      "需要进一步提升题目质量和难度匹配度。",
+      `dear-rethink-${iteration + 1}`,
+    );
+  }
+
+  const evaluation = await runtime.evaluateDraftWithRetry(best.draft.draftJson, "dear-evaluate");
+  if (evaluation.passed) {
+    return best.draft.raw;
+  }
+
+  best = await rethinkDearDraft(runtime, best, joinFeedbackInstructions(evaluation), "dear-rethink-evaluate");
+  const reEvaluation = await runtime.evaluateDraftWithRetry(best.draft.draftJson, "dear-re-evaluate");
+  if (!reEvaluation.passed) {
+    throw new Error(
+      `AI 评估在 DeAR 修订后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || reEvaluation.algorithm_feedback.summary || "未知问题"}`,
+    );
+  }
+  return best.draft.raw;
+}
+
+function extractXmlTag(text: string, tag: string): string {
+  const match = text.match(new RegExp(`<${tag}>\\s*([\\s\\S]*?)\\s*</${tag}>`, "i"));
+  return normalizeString(match?.[1]) || normalizeString(text);
+}
+
+function createEqprNode(thought: string, parent: EqprNode | null): EqprNode {
+  return {
+    id: randomUUID(),
+    thought,
+    parent,
+    children: [],
+    rewards: [],
+    reward: 0,
+    visited: 0,
+    depth: parent ? parent.depth + 1 : 0,
+    isTerminal: false,
+  };
+}
+
+function eqprQ(node: EqprNode): number {
+  if (node.rewards.length === 0) {
+    return node.reward;
+  }
+  return node.rewards.reduce((sum, reward) => sum + reward, 0) / node.rewards.length;
+}
+
+function eqprUct(node: EqprNode): number {
+  const parentVisits = node.parent?.rewards.length ?? 0;
+  return eqprQ(node) + EQPR_W_EXP * Math.sqrt(Math.log(parentVisits + 1) / Math.max(1, node.rewards.length));
+}
+
+function collectEqprPath(node: EqprNode): EqprNode[] {
+  const path: EqprNode[] = [];
+  let current: EqprNode | null = node;
+  while (current) {
+    path.push(current);
+    current = current.parent;
+  }
+  return path.reverse();
+}
+
+function selectEqprLeaf(root: EqprNode): EqprNode[] {
+  const path = [root];
+  let current = root;
+  while (current.children.length > 0 && !current.isTerminal) {
+    current = current.children.reduce((best, child) => eqprUct(child) > eqprUct(best) ? child : best);
+    path.push(current);
+  }
+  return path;
+}
+
+function findBestEqprNode(paths: EqprNode[][], fallback: EqprNode): EqprNode {
+  if (paths.length === 0) {
+    return fallback;
+  }
+  const bestPath = paths.reduce((best, path) => {
+    const pathScore = path.reduce((sum, node) => sum + node.reward, 0) / Math.max(1, path.length);
+    const bestScore = best.reduce((sum, node) => sum + node.reward, 0) / Math.max(1, best.length);
+    return pathScore > bestScore ? path : best;
   });
+  return bestPath.reduce((best, node) => node.reward > best.reward ? node : best, fallback);
+}
 
-  return draft.raw;
+async function scoreEqprThought(runtime: AiGenerateRuntime, thought: string, stageKey: string): Promise<number> {
+  const response = await runtime.callEvaluator(
+    runtime.buildPrompt("algorithms/eqpr-score.md", buildGeneratorBindings(runtime, {
+      thought,
+    })),
+    stageKey,
+  );
+  try {
+    const parsed = runtime.parseJsonRecord(response, "EQPR 思路评分");
+    return clampTenPointScore(readNumber(parsed.score, 5));
+  } catch {
+    return 5;
+  }
+}
+
+async function expandEqprChildren(
+  runtime: AiGenerateRuntime,
+  node: EqprNode,
+  expandWidth: number,
+  stageKey: string,
+): Promise<EqprNode[]> {
+  const trajectory = collectEqprPath(node).map((pathNode, index) => `(${index}) ${pathNode.thought}`).join("\n");
+  const response = await runtime.callEvaluator(
+    runtime.buildPrompt("algorithms/eqpr-reflection.md", buildGeneratorBindings(runtime, {
+      expand_width: String(expandWidth),
+      Question_design_thought: node.thought,
+      trajectory_thoughts: trajectory,
+    })),
+    stageKey,
+  );
+
+  try {
+    const parsed = runtime.parseJsonRecord(response, "EQPR 反思扩展");
+    const children = Array.isArray(parsed.children) ? parsed.children : [];
+    const childNodes = children
+      .filter(isRecord)
+      .map((child) => {
+        const thought = normalizeString(child.thought) || node.thought;
+        const childNode = createEqprNode(thought, node);
+        childNode.reward = clampTenPointScore(readNumber(child.score, 5));
+        return childNode;
+      });
+    while (childNodes.length < expandWidth) {
+      const fallback = createEqprNode(node.thought, node);
+      fallback.reward = 5;
+      childNodes.push(fallback);
+    }
+    return childNodes.slice(0, expandWidth);
+  } catch {
+    const fallback = createEqprNode(node.thought, node);
+    fallback.reward = 5;
+    return [fallback];
+  }
+}
+
+async function simulateEqpr(
+  runtime: AiGenerateRuntime,
+  node: EqprNode,
+  stageKey: string,
+): Promise<{ best: EqprNode; path: EqprNode[] }> {
+  if (node.depth >= EQPR_MAX_DEPTH || node.isTerminal) {
+    node.isTerminal = true;
+    return { best: node, path: [node] };
+  }
+
+  const children = await expandEqprChildren(runtime, node, EQPR_SIMULATE_EXPAND_WIDTH, stageKey);
+  node.children.push(...children);
+  const best = children.reduce((currentBest, child) => child.reward > currentBest.reward ? child : currentBest, node);
+  return {
+    best,
+    path: collectEqprPath(best).filter((pathNode) => pathNode !== node.parent),
+  };
+}
+
+function backpropagateEqpr(path: EqprNode[], reward: number): void {
+  for (const node of [...path].reverse()) {
+    node.rewards.push(reward);
+    node.visited += 1;
+  }
 }
 
 async function executeEqprStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
   runtime.updateProgress({
     stage: "generate",
     state: "active",
-    detail: "正在设计 EQPR 挑战简述。",
-    log: "正在调用 EQPR 设计阶段。",
+    detail: "正在按 EvoQ EQPR/MCTS 生成初始出题思路。",
+    log: "正在调用 EQPR design。",
   });
 
   const designContent = await runtime.callGenerator(
-    runtime.buildPrompt("algorithms/eqpr-design.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      algorithm_constraints: runtime.algorithmPrompt,
-    }),
+    runtime.buildPrompt("algorithms/eqpr-design.md", buildGeneratorBindings(runtime, {
+      Knowledge: runtime.payload.knowledge_point,
+      Difficulty: runtime.payload.difficulty,
+    })),
     "eqpr-design",
   );
-  const designJson = runtime.extractJsonObject(designContent);
+  const root = createEqprNode(extractXmlTag(designContent, "thought"), null);
+  root.reward = await scoreEqprThought(runtime, root.thought, "eqpr-score-root");
+
+  let bestNode = root;
+  let mctsThreshold = root.reward;
+  const minThreshold = root.reward;
+  const iterationPaths: EqprNode[][] = [];
+
+  for (let iteration = 0; iteration < EQPR_ITERATIONS; iteration += 1) {
+    const path = selectEqprLeaf(root);
+    const leaf = path[path.length - 1] || root;
+    let rolloutReward = leaf.reward;
+
+    runtime.updateProgress({
+      stage: "generate",
+      state: "active",
+      detail: `EQPR MCTS 第 ${iteration + 1}/${EQPR_ITERATIONS} 轮。`,
+      log: leaf.thought,
+    });
+
+    if (leaf.depth >= EQPR_MAX_DEPTH || leaf.reward < minThreshold * 0.8) {
+      leaf.isTerminal = true;
+    } else {
+      const expanded = await expandEqprChildren(runtime, leaf, EQPR_EXPAND_WIDTH, `eqpr-expand-${iteration + 1}`);
+      leaf.children.push(...expanded);
+      const simulation = await simulateEqpr(runtime, leaf, `eqpr-simulate-${iteration + 1}`);
+      for (const simNode of simulation.path) {
+        if (!path.includes(simNode)) {
+          path.push(simNode);
+        }
+      }
+      rolloutReward = simulation.best.reward;
+      if (simulation.best.reward > bestNode.reward) {
+        bestNode = simulation.best;
+      }
+      if (simulation.best.reward > mctsThreshold && simulation.best.depth > EQPR_MIN_DEPTH) {
+        simulation.best.isTerminal = true;
+      }
+      mctsThreshold = Math.max(mctsThreshold, simulation.best.reward);
+    }
+
+    backpropagateEqpr(path, rolloutReward);
+    iterationPaths.push([...path]);
+  }
+
+  bestNode = findBestEqprNode(iterationPaths, bestNode);
+  const bestPath = collectEqprPath(bestNode).map((node, index) => `步骤${index + 1}:${node.thought}`).join("；");
 
   runtime.updateProgress({
     stage: "generate",
     state: "active",
-    detail: "正在生成初版 EQPR 草稿。",
-    log: "正在调用 EQPR 起草阶段。",
+    detail: "EQPR 搜索完成，正在根据最佳思路链生成最终题目。",
+    log: bestPath,
   });
 
   let draft = runtime.parseDraft(
     await runtime.callGenerator(
-      runtime.buildPrompt("algorithms/eqpr-draft.md", {
-        spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-        design_json: designJson,
-        generation_constraints: runtime.algorithmPrompt,
-      }),
-      "eqpr-draft",
+      runtime.buildPrompt("algorithms/eqpr-generation.md", buildGeneratorBindings(runtime, {
+        Knowledge: runtime.payload.knowledge_point,
+        Difficulty: runtime.payload.difficulty,
+        Question_design_thought: bestPath,
+      })),
+      "eqpr-generation",
     ),
   );
-
-  runtime.updateProgress({
-    stage: "evaluate",
-    state: "active",
-    detail: "正在在最终评估前审查预期解题路径。",
-    log: "正在调用 EQPR 过程审查阶段。",
-  });
-
-  const processContent = await runtime.callEvaluator(
-    runtime.buildPrompt("algorithms/eqpr-process.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-      design_json: designJson,
-      draft_json: draft.draftJson,
-    }),
-    "eqpr-process",
-  );
-  const processAudit = parseEqprProcessAudit(runtime, processContent);
-
-  if (!processAudit.solvable || processAudit.issues.length > 0 || processAudit.refine_instructions) {
-    runtime.updateProgress({
-      stage: "generate",
-      state: "active",
-      detail: "过程审查未通过，正在修订 EQPR 草稿。",
-      log: `过程审查修订要求：${processAudit.refine_instructions || joinIssues(processAudit.issues)}`,
-    });
-
-    draft = runtime.parseDraft(
-      await runtime.callGenerator(
-        runtime.buildPrompt("algorithms/eqpr-refine.md", {
-          spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-          design_json: designJson,
-          draft_json: draft.draftJson,
-          process_json: JSON.stringify(processAudit, null, 2),
-          evaluation_json: buildEmptyEvaluation(),
-          generation_constraints: runtime.algorithmPrompt,
-        }),
-        "eqpr-refine-process",
-      ),
-    );
-  }
 
   const evaluation = await runtime.evaluateDraftWithRetry(draft.draftJson, "eqpr-evaluate");
   if (evaluation.passed) {
     return draft.raw;
   }
 
-  runtime.updateProgress({
-    stage: "generate",
-    state: "active",
-    detail: "评估未通过，正在继续修订 EQPR 草稿。",
-    log: `评估修订要求：${evaluation.revision_instructions || joinIssues(evaluation.issues)}`,
-  });
-
   draft = runtime.parseDraft(
     await runtime.callGenerator(
-      runtime.buildPrompt("algorithms/eqpr-refine.md", {
-        spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-        design_json: designJson,
-        draft_json: draft.draftJson,
-        process_json: JSON.stringify(processAudit, null, 2),
-        evaluation_json: JSON.stringify(evaluation, null, 2),
-        generation_constraints: runtime.algorithmPrompt,
-      }),
-      "eqpr-refine-evaluate",
+      runtime.buildRevisionMessage(draft.draftJson, evaluation, runtime.algorithmPrompt),
+      "eqpr-repair",
     ),
   );
-
   const reEvaluation = await runtime.evaluateDraftWithRetry(draft.draftJson, "eqpr-re-evaluate");
   if (!reEvaluation.passed) {
     throw new Error(
-      `AI 评估在 EQPR 修订后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || "未知问题"}`,
+      `AI 评估在 EQPR 修补后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || reEvaluation.algorithm_feedback.summary || "未知问题"}`,
     );
   }
-
   return draft.raw;
+}
+
+function parseEvoqReview(runtime: AiGenerateRuntime, content: string): EvoqCandidateReview {
+  const parsed = runtime.parseJsonRecord(content, "EvoQ 候选评审");
+  const issues = normalizeStringArray(parsed.issues);
+  const algorithmFeedback = isRecord(parsed.algorithm_feedback) ? parsed.algorithm_feedback : {};
+  const mutationInstructions = normalizeString(parsed.mutation_instructions) || normalizeString(parsed.weakness) || joinIssues(issues);
+  const score = clampScore(readNumber(parsed.score, 0));
+  const passed = readBoolean(parsed.passed, false);
+  const reviewIssues = !passed && issues.length === 0 && !mutationInstructions
+    ? ["EvoQ 候选评审未通过，但评审器没有返回具体问题"]
+    : issues;
+
+  return {
+    passed,
+    score,
+    fitness: clampScore(readNumber(parsed.fitness, score)),
+    strengths: normalizeStringArray(parsed.strengths).concat(normalizeStringArray(parsed.strength)),
+    weaknesses: normalizeStringArray(parsed.weaknesses).concat(normalizeStringArray(parsed.weakness)),
+    issues: reviewIssues,
+    mutation_instructions: mutationInstructions,
+    rethink_instructions: normalizeString(parsed.rethink_instructions) || normalizeString(algorithmFeedback.rethink_instructions),
+    next_action_hint: normalizeString(parsed.next_action_hint) || normalizeString(algorithmFeedback.next_action_hint),
+  };
 }
 
 async function reviewEvoqCandidate(
@@ -589,119 +666,144 @@ async function reviewEvoqCandidate(
   stageKey: string,
 ): Promise<EvoqCandidateReview> {
   const reviewContent = await runtime.callEvaluator(
-    runtime.buildPrompt("algorithms/evoq-ranker.md", {
-      spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
+    runtime.buildPrompt("algorithms/evoq-ranker.md", buildGeneratorBindings(runtime, {
       draft_json: draftJson,
-    }),
+      item_json: draftJson,
+      reference_items: "None provided.",
+      external_difficulty_eval: "Tutor 当前未接入 EvoQ 原仓库的 IRT/RankLLM 客观难度器；请按目标难度和题目本身严格评估。",
+    })),
     stageKey,
   );
   return parseEvoqReview(runtime, reviewContent);
+}
+
+async function buildEvoqCandidate(
+  runtime: AiGenerateRuntime,
+  content: string,
+  idPrefix: string,
+  reviewStageKey: string,
+): Promise<EvoqPopulationCandidate> {
+  const draft = runtime.parseDraft(content);
+  const review = await reviewEvoqCandidate(runtime, draft.draftJson, reviewStageKey);
+  return {
+    id: `${idPrefix}-${randomUUID()}`,
+    content,
+    draftJson: draft.draftJson,
+    raw: draft.raw,
+    review,
+  };
+}
+
+function tournamentSelect(candidates: EvoqPopulationCandidate[], k = EVOQ_TOURNAMENT_K): EvoqPopulationCandidate {
+  const sampleSize = Math.min(k, candidates.length);
+  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  const sampled = shuffled.slice(0, sampleSize);
+  return sampled.sort(compareCandidates)[0] || candidates.sort(compareCandidates)[0];
+}
+
+function isEvoqEarlyStopCandidate(candidate: EvoqPopulationCandidate): boolean {
+  return candidate.review.passed && candidate.review.fitness >= 90 && candidate.review.issues.length === 0;
 }
 
 export async function runEvoqPopulation(
   runtime: AiGenerateRuntime,
   options: RunEvoqPopulationOptions = {},
 ): Promise<RunEvoqPopulationResult> {
-  const seedStrategies =
-    options.seedStrategies && options.seedStrategies.length > 0
-      ? options.seedStrategies
-      : defaultEvoqSeedStrategies(runtime.payload.content_mode);
-  const mutationRounds = Math.max(1, options.mutationRounds ?? 1);
-  const maxPopulationSize = Math.max(2, options.maxPopulationSize ?? seedStrategies.length + mutationRounds);
+  const populationSize = Math.max(2, options.maxPopulationSize ?? EVOQ_DEFAULT_POPULATION_SIZE);
+  const generations = Math.max(1, options.mutationRounds ?? EVOQ_DEFAULT_GENERATIONS);
+  const seedStrategies = options.seedStrategies && options.seedStrategies.length > 0
+    ? options.seedStrategies
+    : Array.from({ length: populationSize }, (_, index) => `生成第 ${index + 1} 个风格不同、答案唯一的初始种子。`);
 
   let population: EvoqPopulationCandidate[] = [];
 
-  for (const [index, seedStrategy] of seedStrategies.entries()) {
+  for (let index = 0; index < populationSize; index += 1) {
+    const seedStrategy = seedStrategies[index % seedStrategies.length] || "";
     runtime.updateProgress({
       stage: "generate",
       state: "active",
-      detail: `正在生成 EvoQ 初始候选 ${index + 1}。`,
-      log: `初始策略：${seedStrategy}`,
+      detail: `正在按 EvoQ GA 初始化种群 ${index + 1}/${populationSize}。`,
+      log: seedStrategy,
     });
 
     const content = await runtime.callGenerator(
-      runtime.buildPrompt("algorithms/evoq-seed.md", {
-        spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
+      runtime.buildPrompt("algorithms/evoq-seed.md", buildGeneratorBindings(runtime, {
         seed_strategy: seedStrategy,
-        generation_constraints: runtime.algorithmPrompt,
-      }),
+      })),
       `evoq-seed-${index + 1}`,
     );
-    const draft = runtime.parseDraft(content);
-    const review = await reviewEvoqCandidate(runtime, draft.draftJson, `evoq-rank-seed-${index + 1}`);
-
-    population.push({
-      id: `evoq-seed-${index + 1}-${randomUUID()}`,
-      content,
-      draftJson: draft.draftJson,
-      raw: draft.raw,
-      review,
-    });
-    population = [...population].sort(compareCandidates).slice(0, maxPopulationSize);
+    population.push(await buildEvoqCandidate(runtime, content, `evoq-seed-${index + 1}`, `evoq-rank-seed-${index + 1}`));
   }
 
-  for (let round = 0; round < mutationRounds; round += 1) {
-    const ranked = [...population].sort(compareCandidates);
-    const parents = ranked.slice(0, 2);
-    if (parents.length < 2) {
-      break;
+  population = population.sort(compareCandidates).slice(0, populationSize);
+  if (population[0] && isEvoqEarlyStopCandidate(population[0])) {
+    return { candidates: population, best: population[0] };
+  }
+
+  for (let generation = 0; generation < generations; generation += 1) {
+    const sortedPopulation = population.sort(compareCandidates);
+    const eliteCount = Math.max(1, Math.floor(populationSize * EVOQ_ELITE_RATIO));
+    const elites = sortedPopulation.slice(0, eliteCount);
+    const offspringTarget = Math.max(1, Math.floor(populationSize * EVOQ_LAMBDA_RATIO));
+    const offspring: EvoqPopulationCandidate[] = [];
+    let attempts = 0;
+    const maxAttempts = offspringTarget * 3;
+
+    while (offspring.length < offspringTarget && attempts < maxAttempts) {
+      attempts += 1;
+      const parentA = tournamentSelect(population);
+      const parentB = tournamentSelect(elites);
+
+      runtime.updateProgress({
+        stage: "generate",
+        state: "active",
+        detail: `EvoQ 第 ${generation + 1}/${generations} 代交叉生成。`,
+        log: `${parentA.id} x ${parentB.id}`,
+      });
+
+      const childContent = await runtime.callGenerator(
+        runtime.buildPrompt("algorithms/evoq-crossover.md", buildGeneratorBindings(runtime, {
+          parent_a_info: serializeRecord(buildReferenceLikeItemJson(parentA)),
+          parent_b_info: serializeRecord(buildReferenceLikeItemJson(parentB)),
+        })),
+        `evoq-crossover-${generation + 1}-${attempts}`,
+      );
+      const child = await buildEvoqCandidate(
+        runtime,
+        childContent,
+        `evoq-child-${generation + 1}-${attempts}`,
+        `evoq-rank-child-${generation + 1}-${attempts}`,
+      );
+
+      runtime.updateProgress({
+        stage: "generate",
+        state: "active",
+        detail: `EvoQ 第 ${generation + 1}/${generations} 代变异修复。`,
+        log: child.review.mutation_instructions || joinIssues(child.review.issues),
+      });
+
+      const mutantContent = await runtime.callGenerator(
+        runtime.buildPrompt("algorithms/evoq-mutate.md", buildGeneratorBindings(runtime, {
+          input_data: serializeRecord(buildReferenceLikeItemJson(child)),
+        })),
+        `evoq-mutate-${generation + 1}-${attempts}`,
+      );
+      const mutant = await buildEvoqCandidate(
+        runtime,
+        mutantContent,
+        `evoq-mutant-${generation + 1}-${attempts}`,
+        `evoq-rank-mutant-${generation + 1}-${attempts}`,
+      );
+      offspring.push(mutant);
     }
 
-    const mutationGoal = [
-      parents[0].review.mutation_instructions,
-      parents[1].review.mutation_instructions,
-      runtime.payload.content_mode === "image"
-        ? "保持配图对作答具有不可替代性。"
-        : "保持题干简洁，同时继续提升区分度。",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    runtime.updateProgress({
-      stage: "generate",
-      state: "active",
-      detail: `正在执行 EvoQ 变异，第 ${round + 1} 轮。`,
-      log: mutationGoal,
-    });
-
-    const content = await runtime.callGenerator(
-      runtime.buildPrompt("algorithms/evoq-mutate.md", {
-        spec_json: JSON.stringify(runtime.specContext.spec, null, 2),
-        parent_a_json: parents[0].draftJson,
-        parent_a_summary: serializeRecord({
-          score: parents[0].review.score,
-          strengths: parents[0].review.strengths,
-          issues: parents[0].review.issues,
-        }),
-        parent_b_json: parents[1].draftJson,
-        parent_b_summary: serializeRecord({
-          score: parents[1].review.score,
-          strengths: parents[1].review.strengths,
-          issues: parents[1].review.issues,
-        }),
-        mutation_goal: mutationGoal,
-        generation_constraints: runtime.algorithmPrompt,
-      }),
-      `evoq-mutate-${round + 1}`,
-    );
-    const draft = runtime.parseDraft(content);
-    const review = await reviewEvoqCandidate(runtime, draft.draftJson, `evoq-rank-mutation-${round + 1}`);
-
-    population = [
-      ...population,
-      {
-        id: `evoq-child-${round + 1}-${randomUUID()}`,
-        content,
-        draftJson: draft.draftJson,
-        raw: draft.raw,
-        review,
-      },
-    ]
-      .sort(compareCandidates)
-      .slice(0, maxPopulationSize);
+    population = [...population, ...offspring].sort(compareCandidates).slice(0, populationSize);
+    if (population[0] && isEvoqEarlyStopCandidate(population[0])) {
+      break;
+    }
   }
 
-  const ranked = [...population].sort(compareCandidates);
+  const ranked = population.sort(compareCandidates);
   const best = ranked[0];
   if (!best) {
     throw new Error("EvoQ 未产出任何候选题目");
@@ -732,14 +834,12 @@ async function executeEvoqStrategy(runtime: AiGenerateRuntime): Promise<Normaliz
 ${population.best.review.strengths.join("\n") || "- 无"}
 
 变异优化方向：
-${population.best.review.mutation_instructions || joinIssues(population.best.review.issues)}`;
-
-  runtime.updateProgress({
-    stage: "generate",
-    state: "active",
-    detail: "最终评估未通过，正在修补最佳 EvoQ 候选。",
-    log: evaluation.revision_instructions || joinIssues(evaluation.issues),
-  });
+${[
+  population.best.review.mutation_instructions,
+  population.best.review.rethink_instructions,
+  population.best.review.next_action_hint,
+  joinIssues(population.best.review.issues),
+].filter(Boolean).join("\n")}`;
 
   draft = runtime.parseDraft(
     await runtime.callGenerator(
@@ -751,7 +851,7 @@ ${population.best.review.mutation_instructions || joinIssues(population.best.rev
   const reEvaluation = await runtime.evaluateDraftWithRetry(draft.draftJson, "evoq-final-re-evaluate");
   if (!reEvaluation.passed) {
     throw new Error(
-      `AI 评估在 EvoQ 修补后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || "未知问题"}`,
+      `AI 评估在 EvoQ 修补后仍未通过：${joinIssues(reEvaluation.issues) || reEvaluation.revision_instructions || reEvaluation.algorithm_feedback.summary || "未知问题"}`,
     );
   }
 

@@ -6,6 +6,7 @@ import {
 } from "../src/types/ai-generate";
 
 interface CliArgs {
+  subject: string;
   kp: string;
   diff: string;
   questionType: string;
@@ -23,6 +24,7 @@ function parseArgValue(args: string[], name: string): string {
 
 function parseCliArgs(argv: string[]): CliArgs {
   return {
+    subject: parseArgValue(argv, "--subject") || "数学",
     kp: parseArgValue(argv, "--kp"),
     diff: parseArgValue(argv, "--diff"),
     questionType: parseArgValue(argv, "--question-type") || "multiple_choice",
@@ -33,6 +35,7 @@ function parseCliArgs(argv: string[]): CliArgs {
 
 function buildPayload(algorithm: AiGenPayload["algorithm"], cliArgs: CliArgs): AiGenPayload {
   const payload = normalizeAiGenPayload({
+    subject: cliArgs.subject,
     knowledge_point: cliArgs.kp,
     difficulty: cliArgs.diff,
     algorithm,

@@ -62,8 +62,6 @@ export default tseslint.config(
   {
     files: [
       "ai_generators-ts/question_generator.ts",
-      "ai_generators-ts/test_new_model.ts",
-      "ai_generators-ts/test_nv.ts",
       "ai_generators-ts/visual_generate_explanation.ts",
     ],
     rules: {
