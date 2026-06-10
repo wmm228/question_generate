@@ -22,6 +22,7 @@ export interface AiGenerateStatusSnapshot {
   updatedAt: string;
   finished: boolean;
   error?: string;
+  result?: Record<string, unknown>;
   stages: AiGenerateStageSnapshot[];
   logs: string[];
 }
@@ -36,7 +37,7 @@ export interface AiGenerateStatusStore {
     detail: string,
   ): Promise<AiGenerateStatusSnapshot>;
   appendLog(requestId: string, message: string): Promise<AiGenerateStatusSnapshot>;
-  finish(requestId: string, error?: string): Promise<AiGenerateStatusSnapshot>;
+  finish(requestId: string, error?: string, result?: Record<string, unknown>): Promise<AiGenerateStatusSnapshot>;
   applyProgressEvent(requestId: string, event: AiGenerateProgressEvent): Promise<AiGenerateStatusSnapshot>;
 }
 
@@ -151,12 +152,14 @@ function normalizeStatusSnapshot(requestId: string, value: unknown): AiGenerateS
   }
 
   const error = readString(value.error).trim();
+  const result = isRecord(value.result) ? value.result : undefined;
   return {
     requestId: readString(value.requestId).trim() || requestId,
     startedAt,
     updatedAt,
     finished: readBoolean(value.finished),
     error: error || undefined,
+    ...(result ? { result } : {}),
     stages,
     logs,
   };
@@ -220,13 +223,20 @@ function createInMemoryStoreOperations(
     });
   }
 
-  async function finish(requestId: string, error?: string): Promise<AiGenerateStatusSnapshot> {
+  async function finish(
+    requestId: string,
+    error?: string,
+    result?: Record<string, unknown>,
+  ): Promise<AiGenerateStatusSnapshot> {
     return runStatusLock(requestId, async () => {
       const snapshot = await ensureUnlocked(requestId);
       snapshot.updatedAt = nowIso();
       snapshot.finished = true;
       if (error) {
         snapshot.error = error;
+      }
+      if (result) {
+        snapshot.result = result;
       }
       await saveSnapshot(snapshot);
       return snapshot;

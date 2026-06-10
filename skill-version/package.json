@@ -1,0 +1,14 @@
+{
+  "name": "eduqg-skill-version",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node eduqg-question-generator/scripts/entrypoint.mjs --help",
+    "check:oah": "node scripts/check-oah-contract.mjs",
+    "smoke": "node eduqg-question-generator/scripts/entrypoint.mjs --input eduqg-question-generator/examples/request.json --mock --output eduqg-question-generator/out/smoke-result.json",
+    "serve": "node eduqg-question-generator/scripts/entrypoint.mjs --serve"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

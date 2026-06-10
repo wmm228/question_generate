@@ -195,6 +195,10 @@ function createTeacherHistoryMessage(
   };
 }
 
+function createTeacherSafeErrorMessage(actionLabel: string): string {
+  return `${actionLabel}失败，请稍后重试。`;
+}
+
 function createAssistantErrorHistoryMessage(content: string, turnId = "") {
   return {
     role: "assistant" as const,
@@ -274,7 +278,7 @@ async function completePortraitReplyInBackground(
     });
     if (turnId) {
       await deps.portraitStore.appendMessage(ownerUid, sourcePortrait.portrait_id, createAssistantErrorHistoryMessage(
-        `处理出题回复失败: ${getErrorMessage(error)}`,
+        createTeacherSafeErrorMessage("处理出题回复"),
         turnId,
       )).catch((historyError: unknown) => {
         logEvent("error", req, "question_agent.portrait.background_failure_history_failed", {
@@ -1751,6 +1755,52 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
       });
 
       logEvent("info", req, "question_agent.portrait.generated_question_persisted", {
+        portrait_id: portraitId,
+        owner_uid: ownerUid,
+        request_id: requestId,
+        message_count: saved?.messages.length ?? portrait.messages.length,
+      });
+    },
+    persistGenerationFailure: async ({ req, body, requestId }) => {
+      const ownerUid = deps.getUidFromReq(req);
+      const portraitId = normalizeStatusString(body.portrait_id);
+      if (!ownerUid || !portraitId) {
+        return;
+      }
+
+      const portrait = await deps.portraitStore.load(ownerUid, portraitId);
+      if (!portrait) {
+        logEvent("warn", req, "question_agent.portrait.generation_failure_missing_portrait", {
+          portrait_id: portraitId,
+          owner_uid: ownerUid,
+          request_id: requestId,
+        });
+        return;
+      }
+
+      const alreadyPersisted = portrait.messages.some((message) => (
+        message.kind === "error"
+        && normalizeStatusString(message.request_id) === requestId
+        && isRecord(message.payload)
+        && normalizeStatusString(message.payload.type) === "generation_failure"
+      ));
+      if (alreadyPersisted) {
+        return;
+      }
+
+      const saved = await deps.portraitStore.appendMessage(ownerUid, portraitId, {
+        role: "assistant",
+        kind: "error",
+        content: createTeacherSafeErrorMessage("题目生成"),
+        created_at: new Date().toISOString(),
+        request_id: requestId,
+        payload: {
+          type: "generation_failure",
+          redacted: true,
+        },
+      });
+
+      logEvent("info", req, "question_agent.portrait.generation_failure_persisted", {
         portrait_id: portraitId,
         owner_uid: ownerUid,
         request_id: requestId,

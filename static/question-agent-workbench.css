@@ -1296,7 +1296,7 @@ body:not(.has-portrait) .dialogue-input {
   background: transparent;
 }
 
-.inspector-section summary {
+.inspector-section > summary {
   min-height: 42px;
   padding: 9px 4px;
   display: flex;
@@ -1310,11 +1310,11 @@ body:not(.has-portrait) .dialogue-input {
   font-weight: 700;
 }
 
-.inspector-section summary::-webkit-details-marker {
+.inspector-section > summary::-webkit-details-marker {
   display: none;
 }
 
-.inspector-section summary::after {
+.inspector-section > summary::after {
   content: "+";
   width: 22px;
   height: 22px;
@@ -1328,7 +1328,7 @@ body:not(.has-portrait) .dialogue-input {
   line-height: 1;
 }
 
-.inspector-section[open] summary::after {
+.inspector-section[open] > summary::after {
   content: "−";
 }
 
@@ -1827,6 +1827,11 @@ body:not(.has-portrait) .dialogue-input {
   border: 1px solid rgba(10, 10, 40, 0.08);
 }
 
+.dialogue-item-result,
+.library-question-body {
+  container-type: inline-size;
+}
+
 .result-question-card {
   width: 100%;
   display: grid;
@@ -1834,6 +1839,76 @@ body:not(.has-portrait) .dialogue-input {
   padding: 0;
   overflow: hidden;
   background: #f7f8fb;
+  container-type: inline-size;
+}
+
+.result-question-card.has-visual {
+  grid-template-columns: minmax(250px, 0.82fr) minmax(0, 1.18fr);
+  align-items: stretch;
+}
+
+.result-content-panel {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+}
+
+.result-visual-panel {
+  min-width: 0;
+  max-height: min(620px, 68vh);
+  padding: 14px;
+  overflow: auto;
+  border-right: 1px solid #e4e7f1;
+  background: #f3f5fa;
+}
+
+.result-visual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.result-visual-panel-count-1 .result-visual-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.result-visual-item {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #dfe3f2;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.result-visual-item figcaption {
+  min-height: 30px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #edf0f7;
+  color: #52586f;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.result-visual-frame {
+  min-height: 0;
+  max-height: 360px;
+  aspect-ratio: 1 / 1;
+  padding: 8px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+}
+
+.result-visual-frame img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .result-section {
@@ -1905,6 +1980,27 @@ body:not(.has-portrait) .dialogue-input {
 
 .option-image img {
   max-width: 240px;
+}
+
+@container (max-width: 820px) {
+  .result-question-card.has-visual {
+    grid-template-columns: 1fr;
+  }
+
+  .result-visual-panel {
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid #e4e7f1;
+  }
+
+  .result-visual-panel-count-1 .result-visual-grid {
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .result-visual-frame {
+    max-height: 280px;
+  }
 }
 
 .result-actions {
@@ -2470,6 +2566,10 @@ body:not(.has-active-request) .chat-thread-card {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+#image-controls {
+  display: none !important;
+}
+
 .chat-spec-grid .field-wide {
   grid-column: 1 / -1;
 }
@@ -2520,6 +2620,7 @@ body.has-active-request .spec-form-hero {
 
 body:not(.has-active-request) .chat-spec-form,
 body.is-waiting-assistant .chat-spec-form,
+body.is-generating-question .chat-spec-form,
 body:not(.show-spec-form) .chat-spec-form,
 body:not(.has-active-request) .dialogue-list {
   display: none;
@@ -3160,20 +3261,35 @@ body:not(.has-active-request) #export-format-select {
 
 #result-view .library-results-stack {
   min-height: 0 !important;
-  overflow: auto !important;
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable !important;
   padding-right: 2px !important;
 }
 
 .library-question-accordion summary {
   min-height: 44px !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
   grid-template-rows: 1fr !important;
   gap: 8px !important;
 }
 
 .library-question-accordion summary::after {
-  grid-column: 2 !important;
+  content: "展开" !important;
+  grid-column: 3 !important;
   grid-row: 1 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: #f1f3ff !important;
+  color: #555aff !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+  line-height: 1.2 !important;
+}
+
+.library-question-accordion[open] summary::after {
+  content: "收起" !important;
 }
 
 .library-question-title {
@@ -3184,6 +3300,233 @@ body:not(.has-active-request) #export-format-select {
 .library-question-meta,
 .library-question-preview {
   display: none !important;
+}
+
+/* Absolute final right-pane scrolling: active page scrolls, inactive pages stay hidden. */
+.inspector-column {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.inspector-expanded-stack {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+.inspector-utility-row {
+  flex: 0 0 auto !important;
+}
+
+.material-workbench {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane > .inspector-section {
+  display: none !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: auto !important;
+  padding: 12px !important;
+}
+
+#inspector-section-result.is-active-preview > .inspector-section-body {
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+#result-view.result-view {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+#result-view .library-results-stack {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: auto !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview .pre-box {
+  max-height: none !important;
+  overflow-y: visible !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview .details-box .pre-box {
+  max-height: none !important;
+}
+*** End of File
+
+/* Absolute final library card behavior: keep after all legacy right-pane rules. */
+#result-view .library-results-stack {
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable !important;
+}
+
+.library-question-accordion summary {
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+}
+
+.library-question-accordion summary::after {
+  content: "展开" !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: #f1f3ff !important;
+  color: #555aff !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+  line-height: 1.2 !important;
+}
+
+.library-question-accordion[open] summary::after {
+  content: "收起" !important;
+}
+
+.library-question-card-actions {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.library-question-card-actions .btn {
+  min-height: 26px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: 0.72rem !important;
+  line-height: 1 !important;
+}
+
+.library-question-body {
+  border-top: 1px solid #e8ebf5 !important;
+  background: #f8f9fc !important;
+}
+
+/* Absolute final library card behavior: keep after all legacy right-pane rules. */
+#result-view .library-results-stack {
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable !important;
+}
+
+.library-question-accordion summary {
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+}
+
+.library-question-accordion summary::after {
+  content: "展开" !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: #f1f3ff !important;
+  color: #555aff !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+  line-height: 1.2 !important;
+}
+
+.library-question-accordion[open] summary::after {
+  content: "收起" !important;
+}
+
+.library-question-card-actions {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.library-question-card-actions .btn {
+  min-height: 26px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: 0.72rem !important;
+  line-height: 1 !important;
+}
+
+.library-question-body {
+  border-top: 1px solid #e8ebf5 !important;
+  background: #f8f9fc !important;
+}
+
+/* Final library card behavior: visible actions, correct toggles, stable scrolling. */
+#result-view .library-results-stack {
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable !important;
+}
+
+.library-question-accordion summary {
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+}
+
+.library-question-accordion summary::after {
+  content: "展开" !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: #f1f3ff !important;
+  color: #555aff !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+  line-height: 1.2 !important;
+}
+
+.library-question-accordion[open] summary::after {
+  content: "收起" !important;
+}
+
+.library-question-card-actions {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.library-question-card-actions .btn {
+  min-height: 26px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: 0.72rem !important;
+  line-height: 1 !important;
+}
+
+.library-question-body {
+  border-top: 1px solid #e8ebf5 !important;
+  background: #f8f9fc !important;
 }
 
 /* Slimmer edge trigger: the fan already contains the library label. */
@@ -3563,7 +3906,7 @@ body:not(.has-active-request) #export-format-select {
   background: #fff;
 }
 
-.inspector-section summary {
+.inspector-section > summary {
   padding: 10px 0;
 }
 
@@ -4921,20 +5264,35 @@ body.is-inspector-collapsed #inspector-resize-handle {
 
 #result-view .library-results-stack {
   min-height: 0 !important;
-  overflow: auto !important;
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable !important;
   padding-right: 2px !important;
 }
 
 .library-question-accordion summary {
   min-height: 44px !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
   grid-template-rows: 1fr !important;
   gap: 8px !important;
 }
 
 .library-question-accordion summary::after {
-  grid-column: 2 !important;
+  content: "展开" !important;
+  grid-column: 3 !important;
   grid-row: 1 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: #f1f3ff !important;
+  color: #555aff !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+  line-height: 1.2 !important;
+}
+
+.library-question-accordion[open] summary::after {
+  content: "收起" !important;
 }
 
 .library-question-title {
@@ -4945,4 +5303,418 @@ body.is-inspector-collapsed #inspector-resize-handle {
 .library-question-meta,
 .library-question-preview {
   display: none !important;
+}
+
+/* Absolute final right-pane scrolling: active page scrolls, inactive pages stay hidden. */
+.inspector-column {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.inspector-expanded-stack {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+.inspector-utility-row {
+  flex: 0 0 auto !important;
+}
+
+.material-workbench {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane > .inspector-section {
+  display: none !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: auto !important;
+  padding: 12px !important;
+}
+
+#inspector-section-result.is-active-preview > .inspector-section-body {
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+#result-view.result-view {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+#result-view .library-results-stack {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: auto !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview .pre-box {
+  max-height: none !important;
+  overflow-y: visible !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview .details-box .pre-box {
+  max-height: none !important;
+}
+
+/* Final EOF scroll fix: the active right-side page is the only vertical scroller. */
+.workspace-shell,
+.workspace-main,
+.studio-grid {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.inspector-column {
+  align-self: stretch !important;
+  height: 100% !important;
+  max-height: calc(100vh - 20px) !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.inspector-expanded-stack {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+.material-workbench,
+.material-preview-pane,
+.material-preview-pane > .inspector-section.is-active-preview {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > summary {
+  flex: 0 0 auto !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: auto !important;
+  scrollbar-width: thin !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body::-webkit-scrollbar-thumb {
+  border-radius: 999px !important;
+  background: rgba(111, 116, 140, 0.24) !important;
+}
+
+#inspector-section-result.is-active-preview > .inspector-section-body {
+  padding: 0 !important;
+  overflow-y: auto !important;
+}
+
+#result-view.result-view {
+  min-height: 100% !important;
+  height: auto !important;
+  display: block !important;
+  overflow: visible !important;
+  padding: 12px !important;
+}
+
+#result-view .library-search-panel {
+  margin-bottom: 10px !important;
+}
+
+#result-view .library-results-stack {
+  min-height: 0 !important;
+  max-height: none !important;
+  display: grid !important;
+  gap: 10px !important;
+  overflow: visible !important;
+  padding-right: 0 !important;
+}
+
+.library-question-accordion,
+.library-question-body,
+.library-question-body .result-card,
+.library-question-body .result-question-card {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+#result-view .result-inline-image {
+  overflow: visible !important;
+}
+
+#result-view .result-inline-image img {
+  max-height: 280px !important;
+  object-fit: contain !important;
+}
+
+/* Final repaired inspector layout: keep the right pane beside chat and make collapse real. */
+@media (min-width: 761px) {
+  .studio-grid {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, var(--chat-panel-width)) 10px minmax(420px, var(--inspector-width)) !important;
+    gap: 0 !important;
+    align-items: stretch !important;
+    overflow: hidden !important;
+  }
+
+  body.is-inspector-collapsed .studio-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+body.is-inspector-collapsed .inspector-column,
+body.is-inspector-collapsed #inspector-resize-handle {
+  display: none !important;
+}
+
+body.is-inspector-collapsed .chat-surface {
+  grid-column: 1 / -1 !important;
+}
+
+body:not(.is-inspector-collapsed) .inspector-column {
+  display: grid !important;
+}
+
+body:not(.is-inspector-collapsed) #inspector-resize-handle {
+  display: block !important;
+}
+
+.inspector-column {
+  grid-column: 3 !important;
+  height: 100% !important;
+  max-height: calc(100vh - 20px) !important;
+  min-height: 0 !important;
+  align-self: stretch !important;
+  overflow: hidden !important;
+}
+
+.inspector-expanded-stack {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+.material-workbench,
+.material-preview-pane {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane > .inspector-section {
+  display: none !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > summary {
+  flex: 0 0 auto !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+  scrollbar-width: thin !important;
+}
+
+#inspector-section-result.is-active-preview > .inspector-section-body {
+  padding: 0 !important;
+}
+
+#result-view.result-view {
+  min-height: 100% !important;
+  height: auto !important;
+  display: block !important;
+  overflow: visible !important;
+  padding: 12px !important;
+}
+
+#result-view .library-results-stack {
+  overflow: visible !important;
+}
+
+/* Final scroll target: each active right-panel page owns its own vertical scroll. */
+.material-preview-pane > .inspector-section.is-active-preview {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: block !important;
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+  scrollbar-width: thin !important;
+  padding: 12px !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar-thumb {
+  border-radius: 999px !important;
+  background: rgba(111, 116, 140, 0.28) !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > summary {
+  display: none !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview > .inspector-section-body {
+  display: grid !important;
+  gap: 10px !important;
+  min-height: auto !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview .pre-box,
+.material-preview-pane > .inspector-section.is-active-preview .spec-description-box {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Final library cleanup: tighter content width, no duplicate actions, scrollbars only while scrolling. */
+.material-preview-pane > .inspector-section.is-active-preview {
+  padding: 10px 4px 10px 12px !important;
+  overflow-y: auto !important;
+  scrollbar-gutter: stable !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: transparent transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar-thumb {
+  border-radius: 999px !important;
+  background: transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview.is-scrolling {
+  scrollbar-color: rgba(111, 116, 140, 0.32) transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(111, 116, 140, 0.32) !important;
+}
+
+#result-view.result-view {
+  padding: 8px 4px 12px 8px !important;
+}
+
+#result-view .library-search-panel,
+#result-view .library-question-accordion {
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+
+#result-view .library-search-panel {
+  margin: 0 0 10px !important;
+}
+
+#result-view .library-results-stack {
+  gap: 10px !important;
+}
+
+.library-question-body .result-actions {
+  display: none !important;
+}
+
+/* Final stable scrollbar: reserve gutter always, reveal thumb only while scrolling. */
+.material-preview-pane > .inspector-section.is-active-preview {
+  scrollbar-gutter: stable !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: transparent transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+  background: transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview::-webkit-scrollbar-thumb {
+  border-radius: 999px !important;
+  background: transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview.is-scrolling {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(111, 116, 140, 0.32) transparent !important;
+}
+
+.material-preview-pane > .inspector-section.is-active-preview.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(111, 116, 140, 0.32) !important;
 }

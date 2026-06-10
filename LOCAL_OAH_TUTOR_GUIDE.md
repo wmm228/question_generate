@@ -114,6 +114,8 @@ Tutor 启动 `local_oah` profile 时，会强制使用：
 
 - `OAH_BASE_URL=http://127.0.0.1:8787`
 - `OAH_AGENT_NAME=question-orchestrator`
+- `OAH_INTENT_AGENT_NAME=intent-recognizer`
+- `OAH_INTENT_MODEL_NAME=`（留空则沿用 `OAH_MODEL_NAME`）
 - `OAH_WORKSPACE_RUNTIME=tutor-question-generation`
 - `OAH_WORKSPACE_NAME=tutor-question-generation`
 - `OAH_WORKSPACE_OWNER_ID=tutor`

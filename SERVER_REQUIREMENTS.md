@@ -99,6 +99,8 @@
 ```env
 OAH_BASE_URL=http://YOUR_OAH_HOST:8787
 OAH_AGENT_NAME=question-orchestrator
+OAH_INTENT_AGENT_NAME=intent-recognizer
+OAH_INTENT_MODEL_NAME=
 OAH_WORKSPACE_RUNTIME=tutor-question-generation
 OAH_WORKSPACE_NAME=tutor-question-generation
 OAH_WORKSPACE_OWNER_ID=tutor
@@ -120,6 +122,8 @@ SESSION_TTL_MS=2592000000
 - `OAH_BASE_URL`：必填，指向 OAH API
 - `OAH_WORKSPACE_RUNTIME`：和 OAH 里已有 workspace/runtime 保持一致
 - `OAH_MODEL_NAME`：可选，不写时会使用 OAH workspace 默认模型
+- `OAH_INTENT_AGENT_NAME`：可选，默认使用 `intent-recognizer`
+- `OAH_INTENT_MODEL_NAME`：可选，单独指定意图识别模型；留空时沿用 `OAH_MODEL_NAME`
 - `TUTOR_PORT`：可选，默认 `7896`
 - `TUTOR_STORAGE_BACKEND`：可选，默认会走 `filesystem`
 
@@ -199,4 +203,3 @@ npm run dev
 
 - 镜像：`Debian12-Docker26`
 - 配置：`4 核 8 GB`
-

@@ -31,6 +31,14 @@ export interface AiGenerateRouteOptions {
     payload: AiGenPayload;
     result: AiGenerateApiResponse;
   }) => Promise<void>;
+  persistGenerationFailure?: (context: {
+    req: Request;
+    body: Record<string, unknown>;
+    requestId: string;
+    payload: AiGenPayload;
+    errorMessage: string;
+    result?: AiGenerateApiResponse;
+  }) => Promise<void>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -211,6 +219,24 @@ export function attachAiGenerateRoutes(
           duration_ms: Date.now() - reqStart,
           visual_error: visualError,
         });
+        if (options.persistGenerationFailure) {
+          try {
+            await options.persistGenerationFailure({
+              req,
+              body,
+              requestId: publicReqId,
+              payload,
+              errorMessage,
+              result,
+            });
+          } catch (persistError) {
+            await deps.statusStore.appendLog(statusRequestId, "题目生成失败，但写入失败原因到画像历史失败。").catch(() => undefined);
+            logEvent("error", req, "ai_generate.failure_history_persist_failed", {
+              duration_ms: Date.now() - reqStart,
+              error: serializeError(persistError),
+            });
+          }
+        }
         res.status(502).json({
           error: "图片题渲染失败，未生成必需图片。",
           code: "AI_IMAGE_RENDER_FAILED",
@@ -224,7 +250,7 @@ export function attachAiGenerateRoutes(
       await deps.statusStore.updateStage(statusRequestId, "evaluate", "done", "评估与修订已完成。");
       await deps.statusStore.updateStage(statusRequestId, "render", "done", "最终响应组装已完成。");
       await deps.statusStore.appendLog(statusRequestId, "AI 出题流程已完成。");
-      await deps.statusStore.finish(statusRequestId);
+      await deps.statusStore.finish(statusRequestId, undefined, result as unknown as Record<string, unknown>);
 
       if (options.persistGeneratedQuestion) {
         try {
@@ -264,6 +290,23 @@ export function attachAiGenerateRoutes(
         duration_ms: Date.now() - reqStart,
         error: serializeError(error),
       });
+      if (options.persistGenerationFailure) {
+        try {
+          await options.persistGenerationFailure({
+            req,
+            body,
+            requestId: publicReqId,
+            payload,
+            errorMessage: message,
+          });
+        } catch (persistError) {
+          await deps.statusStore.appendLog(statusRequestId, "题目生成失败，但写入失败原因到画像历史失败。").catch(() => undefined);
+          logEvent("error", req, "ai_generate.failure_history_persist_failed", {
+            duration_ms: Date.now() - reqStart,
+            error: serializeError(persistError),
+          });
+        }
+      }
 
       if (
         message.includes("status=timed_out")

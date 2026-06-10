@@ -10,6 +10,7 @@ import type {
 export const QUESTION_AGENT_ROLES = [
   "question-orchestrator",
   "spec-normalizer",
+  "intent-recognizer",
   "text-question-generator",
   "visual-question-generator",
   "student-simulator",

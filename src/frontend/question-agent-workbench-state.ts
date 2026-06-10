@@ -27,6 +27,8 @@ import {
 } from "./question-agent-workbench-storage.js";
 import { createRequestId, getPortraitReadyState, normalizePortraitList, normalizeString, readSpecResponseFromError } from "./question-agent-workbench-utils.js";
 
+const ACTIVE_GENERATION_STATUS_GRACE_MS = 2 * 60 * 1000;
+
 export interface WorkbenchSessionState {
   authUid: string;
   sessionToken: string;
@@ -110,6 +112,81 @@ export class WorkbenchSessionStore {
     this.state.currentRequestId = "";
   }
 
+  private setActiveGeneration(requestId: string, portraitId: string): void {
+    this.state.persisted.activeGeneration = {
+      requestId,
+      portraitId,
+      startedAt: new Date().toISOString(),
+    };
+    this.persist();
+  }
+
+  private clearActiveGeneration(requestId = ""): void {
+    const activeRequestId = normalizeString(this.state.persisted.activeGeneration?.requestId);
+    if (requestId && activeRequestId && activeRequestId !== requestId) {
+      return;
+    }
+    this.state.persisted.activeGeneration = null;
+    this.persist();
+  }
+
+  private isActiveGenerationRequest(requestId: string): boolean {
+    const activeRequestId = normalizeString(this.state.persisted.activeGeneration?.requestId);
+    return Boolean(activeRequestId && activeRequestId === normalizeString(requestId));
+  }
+
+  private shouldKeepMissingActiveGeneration(requestId: string): boolean {
+    if (!this.isActiveGenerationRequest(requestId)) {
+      return false;
+    }
+    const startedAt = Date.parse(normalizeString(this.state.persisted.activeGeneration?.startedAt));
+    if (!Number.isFinite(startedAt)) {
+      return false;
+    }
+    return Date.now() - startedAt <= ACTIVE_GENERATION_STATUS_GRACE_MS;
+  }
+
+  private markActiveGenerationMissing(requestId: string): void {
+    const now = new Date().toISOString();
+    const activeStartedAt = normalizeString(this.state.persisted.activeGeneration?.startedAt) || now;
+    this.stopProgressPolling();
+    this.state.currentRequestId = normalizeString(requestId);
+    this.state.progressSnapshot = {
+      requestId: normalizeString(requestId),
+      startedAt: activeStartedAt,
+      updatedAt: now,
+      finished: true,
+      error: "生成请求没有建立服务端进度，可能已被刷新中断。请重新点击生成。",
+      stages: [
+        {
+          key: "submit",
+          label: "提交请求",
+          detail: "未确认服务端接收本次生成请求。",
+          state: "error",
+          updatedAt: now,
+        },
+      ],
+      logs: ["刷新后没有找到本次生成请求的服务端进度快照。"],
+    };
+    this.clearActiveGeneration(requestId);
+    this.emit();
+  }
+
+  private async finalizeFinishedActiveGeneration(requestId: string): Promise<void> {
+    if (!this.isActiveGenerationRequest(requestId)) {
+      return;
+    }
+    const portraitId = normalizeString(this.state.persisted.activeGeneration?.portraitId);
+    if (portraitId) {
+      try {
+        await this.refreshPortraitDocument(portraitId);
+      } catch {
+        // Keep the terminal progress state visible if portrait refresh fails.
+      }
+    }
+    this.clearActiveGeneration(requestId);
+  }
+
   setAuthUid(value: string): void {
     this.state.authUid = value;
     this.emit();
@@ -140,6 +217,7 @@ export class WorkbenchSessionStore {
     this.state.portraitDocument = null;
     this.state.specNormalizeResponse = null;
     this.state.persisted.activePortraitId = "";
+    this.clearActiveGeneration();
     clearGuestAuth();
     this.persist();
   }
@@ -162,6 +240,7 @@ export class WorkbenchSessionStore {
       this.state.currentUser = uid;
       await this.refreshWorkbenchData();
       await this.restorePortrait();
+      await this.restoreActiveGeneration();
       this.emit();
       return true;
     } catch {
@@ -185,6 +264,7 @@ export class WorkbenchSessionStore {
     this.state.currentUser = resolvedUid;
     await this.refreshWorkbenchData();
     await this.restorePortrait();
+    await this.restoreActiveGeneration();
     this.emit();
   }
 
@@ -244,11 +324,47 @@ export class WorkbenchSessionStore {
     }
   }
 
+  async restoreActiveGeneration(): Promise<void> {
+    const activeGeneration = this.state.persisted.activeGeneration;
+    const requestId = normalizeString(activeGeneration?.requestId);
+    const portraitId = normalizeString(activeGeneration?.portraitId);
+    if (!requestId) {
+      return;
+    }
+    if (portraitId && normalizeString(this.state.portraitDocument?.portrait_id) !== portraitId) {
+      return;
+    }
+    this.state.currentRequestId = requestId;
+    this.emit();
+    const foundSnapshot = await this.fetchProgressSnapshot(requestId, true);
+    if (!foundSnapshot) {
+      if (this.shouldKeepMissingActiveGeneration(requestId)) {
+        this.startProgressPolling(requestId);
+        return;
+      }
+      this.markActiveGenerationMissing(requestId);
+      return;
+    }
+    if (this.state.progressSnapshot?.finished) {
+      if (portraitId) {
+        try {
+          await this.refreshPortraitDocument(portraitId);
+        } catch {
+          // Keep the progress snapshot visible even if portrait refresh fails.
+        }
+      }
+      this.clearActiveGeneration(requestId);
+      return;
+    }
+    this.startProgressPolling(requestId);
+  }
+
   startNewPortraitDraft(): void {
     this.resetGenerationState();
     this.state.portraitDocument = null;
     this.state.specNormalizeResponse = null;
     this.state.persisted.activePortraitId = "";
+    this.clearActiveGeneration();
     this.state.persisted.latestPortraitReplyDraft = "";
     this.persist();
     this.emit();
@@ -259,6 +375,7 @@ export class WorkbenchSessionStore {
     this.state.portraitDocument = null;
     this.state.specNormalizeResponse = null;
     this.state.persisted.activePortraitId = "";
+    this.clearActiveGeneration();
     this.state.persisted.latestKnowledgePointDraft = "";
     this.state.persisted.latestPortraitReplyDraft = "";
     this.state.persisted.requestDraft = structuredClone(DEFAULT_PERSISTED_STATE.requestDraft);
@@ -298,6 +415,7 @@ export class WorkbenchSessionStore {
       this.state.portraitDocument = null;
       this.state.specNormalizeResponse = null;
       this.state.persisted.activePortraitId = "";
+      this.clearActiveGeneration();
       this.state.persisted.latestPortraitReplyDraft = "";
     }
     await this.refreshPortraitList();
@@ -364,7 +482,10 @@ export class WorkbenchSessionStore {
         : [];
     }
 
-    if (patch.content_mode === "text") {
+    const contentMode = normalizeString(this.state.persisted.requestDraft.content_mode) || "text";
+    if (contentMode === "image") {
+      this.state.persisted.requestDraft.image_mode = "required";
+    } else {
       this.state.persisted.requestDraft.image_mode = "none";
       this.state.persisted.requestDraft.image_placement = "";
       this.state.persisted.requestDraft.image_targets = [];
@@ -389,6 +510,7 @@ export class WorkbenchSessionStore {
     if (!draft) {
       return false;
     }
+    const contentMode = normalizeString(draft.content_mode) || "text";
     this.state.persisted.latestKnowledgePointDraft = normalizeString(draft.knowledge_point);
     this.state.persisted.requestDraft = {
       subject: normalizeString(draft.subject),
@@ -396,10 +518,12 @@ export class WorkbenchSessionStore {
       difficulty: normalizeString(draft.difficulty) || "2",
       algorithm: normalizeString(draft.algorithm) || "direct",
       question_type: normalizeString(draft.question_type) || "multiple_choice",
-      content_mode: normalizeString(draft.content_mode) || "text",
-      image_mode: normalizeString(draft.image_mode) || "none",
-      image_placement: normalizeString(draft.image_placement),
-      image_targets: Array.isArray(draft.image_targets) ? draft.image_targets.map((item) => normalizeString(item)).filter(Boolean) : [],
+      content_mode: contentMode,
+      image_mode: contentMode === "image" ? "required" : "none",
+      image_placement: contentMode === "image" ? normalizeString(draft.image_placement) : "",
+      image_targets: contentMode === "image" && Array.isArray(draft.image_targets)
+        ? draft.image_targets.map((item) => normalizeString(item)).filter(Boolean)
+        : [],
     };
     return true;
   }
@@ -480,16 +604,19 @@ export class WorkbenchSessionStore {
 
   buildPayload(): GenerationPayload {
     const requestDraft = this.state.persisted.requestDraft;
+    const contentMode = normalizeString(requestDraft.content_mode) || "text";
     return {
       subject: normalizeString(requestDraft.subject),
       knowledge_point: normalizeString(requestDraft.knowledge_point),
       difficulty: normalizeString(requestDraft.difficulty) || "2",
       algorithm: normalizeString(requestDraft.algorithm) || "direct",
       question_type: normalizeString(requestDraft.question_type) || "multiple_choice",
-      content_mode: normalizeString(requestDraft.content_mode) || "text",
-      image_mode: normalizeString(requestDraft.image_mode) || "none",
-      image_placement: normalizeString(requestDraft.image_placement),
-      image_targets: Array.isArray(requestDraft.image_targets) ? requestDraft.image_targets.map((item) => normalizeString(item)).filter(Boolean) : [],
+      content_mode: contentMode,
+      image_mode: contentMode === "image" ? "required" : "none",
+      image_placement: contentMode === "image" ? normalizeString(requestDraft.image_placement) : "",
+      image_targets: contentMode === "image" && Array.isArray(requestDraft.image_targets)
+        ? requestDraft.image_targets.map((item) => normalizeString(item)).filter(Boolean)
+        : [],
     };
   }
 
@@ -529,6 +656,7 @@ export class WorkbenchSessionStore {
     const requestId = createRequestId();
     const portraitId = normalizeString(this.state.portraitDocument?.portrait_id);
     this.state.currentRequestId = requestId;
+    this.setActiveGeneration(requestId, portraitId);
     this.state.generatedResult = null;
     this.state.progressSnapshot = null;
     this.emit();
@@ -566,6 +694,14 @@ export class WorkbenchSessionStore {
       throw error;
     } finally {
       await this.fetchProgressSnapshot(requestId, true);
+      if (portraitId) {
+        try {
+          await this.refreshPortraitDocument(portraitId);
+        } catch {
+          // The progress/error state remains visible even if portrait refresh fails.
+        }
+      }
+      this.clearActiveGeneration(requestId);
       this.stopProgressPolling();
       this.emit();
     }
@@ -586,19 +722,33 @@ export class WorkbenchSessionStore {
     }
   }
 
-  async fetchProgressSnapshot(requestId: string, silent404: boolean): Promise<void> {
+  async fetchProgressSnapshot(requestId: string, silent404: boolean): Promise<boolean> {
     try {
       this.state.progressSnapshot = await this.api.getProgress(requestId);
+      if (this.state.progressSnapshot.finished && this.state.progressSnapshot.result) {
+        this.state.generatedResult = this.state.progressSnapshot.result;
+      }
       if (this.state.progressSnapshot.finished) {
         this.stopProgressPolling();
+        await this.finalizeFinishedActiveGeneration(requestId);
       }
       this.emit();
+      return true;
     } catch (error) {
       if (silent404 && error instanceof Error && "status" in error && (error as { status?: number }).status === 404) {
-        return;
+        if (this.shouldKeepMissingActiveGeneration(requestId)) {
+          this.emit();
+          return false;
+        }
+        if (this.isActiveGenerationRequest(requestId)) {
+          this.markActiveGenerationMissing(requestId);
+          return false;
+        }
+        return false;
       }
       this.stopProgressPolling();
       this.emit();
+      return false;
     }
   }
 

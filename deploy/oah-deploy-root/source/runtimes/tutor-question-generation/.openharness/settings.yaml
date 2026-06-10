@@ -1,0 +1,19 @@
+default_agent: question-orchestrator
+models:
+  orchestrator:
+    ref: platform/kimi-k25
+    temperature: 0.1
+    top_p: 0.7
+    max_tokens: 3072
+  generator:
+    ref: platform/kimi-k25
+    temperature: 0.35
+    top_p: 0.9
+  evaluator:
+    ref: platform/kimi-k25
+    temperature: 0.05
+    top_p: 0.6
+  simulator:
+    ref: platform/kimi-k25
+    temperature: 0.2
+    top_p: 0.8

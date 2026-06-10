@@ -17,6 +17,11 @@ export interface OahCoreConfig extends OahWorkspaceSelector {
   model: string;
 }
 
+export interface OahIntentConfig extends OahCoreConfig {
+  intentAgentName: string;
+  intentModel: string;
+}
+
 export interface OahMediaConfig {
   ocrBaseUrl: string;
   ocrModel: string;
@@ -70,6 +75,15 @@ export function getOahCoreConfig(): OahCoreConfig {
     ...selector,
     baseUrl: trimUrl(process.env.OAH_BASE_URL) || DEFAULT_OAH_BASE_URL,
     model: trim(process.env.OAH_MODEL_NAME),
+  };
+}
+
+export function getOahIntentConfig(): OahIntentConfig {
+  const core = getOahCoreConfig();
+  return {
+    ...core,
+    intentAgentName: trim(process.env.OAH_INTENT_AGENT_NAME) || "intent-recognizer",
+    intentModel: trim(process.env.OAH_INTENT_MODEL_NAME) || core.model,
   };
 }
 

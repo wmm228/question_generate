@@ -1,0 +1,59 @@
+google_gemma-4-31b-it:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: google/gemma-4-31b-it
+
+meta_llama-3.3-70b-instruct:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: meta/llama-3.3-70b-instruct
+
+mistralai_ministral-14b-instruct-2512:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: mistralai/ministral-14b-instruct-2512
+
+nvidia_nemotron-3-nano-30b-a3b:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: nvidia/nemotron-3-nano-30b-a3b
+
+qwen_qwen3-next-80b-a3b-instruct:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: qwen/qwen3-next-80b-a3b-instruct
+
+qwen_qwen3.5-122b-a10b:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: qwen/qwen3.5-122b-a10b
+
+qwen_qwen3.5-397b-a17b:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: qwen/qwen3.5-397b-a17b
+
+stepfun-ai_step-3.5-flash:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: stepfun-ai/step-3.5-flash
+
+openai_gpt-oss-20b:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: openai/gpt-oss-20b
+
+minimaxai_minimax-m2.7:
+  provider: openai-compatible
+  key: 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
+  url: https://integrate.api.nvidia.com/v1
+  name: minimaxai/minimax-m2.7

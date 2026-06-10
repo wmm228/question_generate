@@ -12,6 +12,7 @@ TypeScript services and OAH agent prompts must align to this file instead of mai
   "main_agent": "question-orchestrator",
   "subagents": [
     "spec-normalizer",
+    "intent-recognizer",
     "text-question-generator",
     "visual-question-generator",
     "text-question-evaluator",
@@ -78,18 +79,15 @@ TypeScript services and OAH agent prompts must align to this file instead of mai
       "message": "Teacher must explicitly confirm content_mode before generation."
     },
     {
-      "field": "algorithm",
-      "when": "always",
-      "message": "Teacher must explicitly confirm algorithm before generation."
-    },
-    {
       "field": "image_requirement",
       "when": "image_only",
       "message": "Teacher must explicitly confirm image targets or image placement for image questions."
     }
   ],
   "human_controlled_rules": [
-    "Question type, content mode, difficulty, image targets, and generation algorithm must be explicit before generation.",
+    "Question type, content mode, and difficulty must be explicit before generation.",
+    "If the teacher requests an image question without specifying placement, use the business default stem image target.",
+    "If the teacher does not specify a generation algorithm, use the business default direct algorithm.",
     "AI may suggest missing fields, but may not silently change teacher-selected subject, difficulty, algorithm, or image requirement.",
     "Generated output must be schema-validated before it is shown to the user.",
     "Image questions must contain answer-relevant visual information, not decorative images.",
@@ -170,12 +168,18 @@ TypeScript services and OAH agent prompts must align to this file instead of mai
 The runtime uses a main-orchestrator / subagent architecture:
 - `question-orchestrator` talks with the teacher, confirms the teacher-controlled spec, and routes work.
 - `spec-normalizer` turns teacher intent into `edu-question-spec.v1` and identifies missing fields.
+- `intent-recognizer` classifies whether the teacher's current turn authorizes immediate question generation after the spec has been normalized.
 - `text-question-generator` generates text-only questions.
 - `visual-question-generator` generates image-grounded questions and Manim code.
 - `text-question-evaluator` evaluates text-only questions.
 - `visual-question-evaluator` evaluates image questions, image relevance, and Manim render safety.
 - `student-simulator` and `profile-evolution` provide optional personalization/profile signals.
 
-Human-controlled fields must come from the teacher/business request, not from AI: subject, knowledge point, difficulty, question type, content mode, algorithm, and image requirement.
+Human-controlled fields must come from the teacher/business request or business defaults, not from profile inference: subject, knowledge point, difficulty, question type, content mode, algorithm, and image requirement.
+
+Memory model:
+- `session_memory` is the long-term compressed state for the current dialogue.
+- Recent messages are short-term context for turn-level interpretation.
+- Teacher and student profiles are stable portrait signals, not dialogue memory.
 
 The service calling this runtime is responsible for final API validation, rendering, persistence, and request logging.

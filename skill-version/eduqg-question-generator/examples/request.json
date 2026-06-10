@@ -1,0 +1,28 @@
+{
+  "version": "edu-question-spec.v1",
+  "locale": "zh-CN",
+  "grade_band": "\u521d\u4e2d",
+  "subject": "\u6570\u5b66",
+  "knowledge_points": ["\u52fe\u80a1\u5b9a\u7406"],
+  "curriculum_goal": "\u8003\u67e5\u76f4\u89d2\u4e09\u89d2\u5f62\u4e09\u8fb9\u5173\u7cfb\uff0c\u5e76\u8bc6\u522b\u659c\u8fb9\u3002",
+  "question_type": "single_choice",
+  "difficulty": 3,
+  "count": 1,
+  "content_mode": "diagram_required",
+  "diagram": {
+    "required": true,
+    "position": "stem",
+    "must_be_answer_relevant": true,
+    "style": "clean_svg"
+  },
+  "strategy": "direct",
+  "teacher_profile": {
+    "style": "\u6e05\u6670\u3001\u5206\u6b65\u3001\u9002\u5408\u8bfe\u5802\u5c0f\u6d4b",
+    "constraints": ["\u9009\u9879\u4e0d\u8981\u8fc7\u957f", "\u89e3\u6790\u8981\u5206\u6b65\u9aa4"]
+  },
+  "student_profile": {
+    "level": "\u4e2d\u7b49",
+    "common_errors": ["\u6df7\u6dc6\u76f4\u89d2\u8fb9\u548c\u659c\u8fb9"]
+  },
+  "extra_requirements": "\u9898\u76ee\u7528\u4e8e\u8bfe\u5802\u5c0f\u6d4b\u3002"
+}

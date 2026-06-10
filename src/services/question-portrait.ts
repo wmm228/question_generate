@@ -27,8 +27,9 @@ import type {
   QuestionPortraitTurnResult,
 } from "../types/question-portrait";
 import { createOahSessionClient, createOahSessionClientForExistingSession } from "./oah-client";
-import { getOahCoreConfig } from "./oah-config";
+import { getOahCoreConfig, getOahIntentConfig } from "./oah-config";
 import { normalizeQuestionGenerationSpec } from "./question-agent-spec";
+import { buildQuestionPortraitMemory } from "./question-portrait-memory";
 
 interface RemotePortraitReply {
   assistant_message?: unknown;
@@ -65,6 +66,18 @@ interface RemotePortraitState {
 
 interface RemotePortraitUiActions {
   showSpecForm: boolean;
+}
+
+interface RemoteIntentRecognitionReply {
+  teacher_intent?: unknown;
+  confidence?: unknown;
+  reasoning?: unknown;
+}
+
+interface RemoteIntentRecognitionResult {
+  teacherIntent: QuestionPortraitTeacherIntent;
+  confidence: number;
+  reasoning: string;
 }
 
 const DEFAULT_PORTRAIT_DIALOGUE_TIMEOUT_MS = 240_000;
@@ -179,6 +192,17 @@ function normalizeTeacherIntent(value: unknown): QuestionPortraitTeacherIntent {
   return normalized === "generate_question" ? "generate_question" : "continue_portrait";
 }
 
+function normalizeConfidence(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number.parseFloat(normalizeString(value));
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  if (numeric > 1) {
+    return Math.max(0, Math.min(1, numeric / 100));
+  }
+  return Math.max(0, Math.min(1, numeric));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -238,7 +262,7 @@ function createEmptyDraft(): QuestionPortraitDraft {
     subject: "",
     knowledge_point: "",
     difficulty: "",
-    algorithm: "",
+    algorithm: "direct",
     question_type: "",
     content_mode: "",
     image_mode: "none",
@@ -325,6 +349,41 @@ function mapPlacementToTargets(imagePlacement: AiGenImagePlacementOrEmpty): AiGe
     return ["stem"];
   }
   return [];
+}
+
+function mapTargetsToPlacement(imageTargets: AiGenImageTarget[]): AiGenImagePlacementOrEmpty {
+  if (imageTargets.length !== 1) {
+    return "";
+  }
+  if (imageTargets[0] === "options") {
+    return "option_image";
+  }
+  if (imageTargets[0] === "solution") {
+    return "explanation_image";
+  }
+  if (imageTargets[0] === "stem") {
+    return "stem_image";
+  }
+  return "";
+}
+
+function applyImageDefaults(draft: QuestionPortraitDraft): void {
+  if (draft.content_mode !== "image") {
+    return;
+  }
+  if (draft.image_mode === "none") {
+    draft.image_mode = "required";
+  }
+  if (draft.image_targets.length === 0 && draft.image_placement) {
+    draft.image_targets = mapPlacementToTargets(draft.image_placement);
+  }
+  if (!draft.image_placement && draft.image_targets.length === 1) {
+    draft.image_placement = mapTargetsToPlacement(draft.image_targets);
+  }
+  if (!draft.image_placement && draft.image_targets.length === 0) {
+    draft.image_placement = "stem_image";
+    draft.image_targets = ["stem"];
+  }
 }
 
 function applyTeacherProfilePatch(target: Partial<QuestionPortraitDraft["teacher_profile"]>, patch: unknown): void {
@@ -428,8 +487,8 @@ function applyRemoteFieldPatch(draft: QuestionPortraitDraft, patch: unknown): vo
     draft.image_mode = "none";
     draft.image_placement = "";
     draft.image_targets = [];
-  } else if (draft.content_mode === "image" && draft.image_mode === "none") {
-    draft.image_mode = "required";
+  } else {
+    applyImageDefaults(draft);
   }
 
   applyTeacherProfilePatch(draft.teacher_profile, fields.teacher_profile);
@@ -451,12 +510,6 @@ function resolvePendingFieldFromDraft(draft: QuestionPortraitDraft): QuestionPor
   }
   if (!draft.content_mode) {
     return "content_mode";
-  }
-  if (draft.content_mode === "image" && !draft.image_placement) {
-    return "image_requirement";
-  }
-  if (!draft.algorithm) {
-    return "algorithm";
   }
   return "none";
 }
@@ -601,6 +654,10 @@ function renderPortraitMarkdown(document: QuestionPortraitDocument): string {
     "",
     document.summary || "暂无摘要",
     "",
+    "## 长期记忆",
+    "",
+    document.session_memory?.summary || "暂无长期记忆",
+    "",
     "## 主智能体判断",
     "",
     `- 状态说明: ${document.guidance.status_explanation || "暂无"}`,
@@ -731,6 +788,9 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     ? JSON.stringify(latestMessages, null, 2)
     : "[]";
   const generatedQuestionBlock = buildLatestGeneratedQuestionBlock(document);
+  const memoryBlock = document
+    ? JSON.stringify(document.session_memory || buildQuestionPortraitMemory(document), null, 2)
+    : "{}";
 
   return [
     "你是 EduQG 虚拟教师，也是 Tutor 出题系统内部的试题规范抽取与出题意图判断助手。",
@@ -739,6 +799,7 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     "",
     "你的职责：",
     "- 从老师当前消息和最近对话中识别出题意图，而不是依赖固定触发词。",
+    "- `session_memory` 是跨轮次长期记忆，最近对话是短期上下文；教师/学生画像只是稳定画像信号，不是对话记忆。",
     "- 从自然语言中抽取学科、知识点、难度、题型、内容模式、图片要求、出题算法、教师偏好和学生情况。",
     "- 学科决定出题角色：数学题按数学教师与命题专家处理，物理题按物理教师处理，建筑设计原理题按建筑学教师与课程命题专家处理；其他学科按对应学科教师角色处理。",
     "- 判断哪些必填字段已经确认、哪些仍缺失。",
@@ -801,10 +862,13 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     "- 只有当老师明确表达现在开始出题，且更新后的试题规范已经完整可生成时，才输出 `generate_question`。",
     "- 如果任一必填字段仍缺失，`teacher_intent` 必须保持 `continue_portrait`。",
     "- 不要臆造老师没有确认的信息；不确定就留空并追问。",
+    "- `algorithm` 有业务默认值 `direct`；老师没有指定算法、表示无偏好或接受系统安排时，不要追问算法。",
+    "- 图片题有业务默认图片位置：题干图 `stem_image` / `image_targets=[\"stem\"]`；老师只要求带图但没有指定位置、或表示任一位置均可时，不要追问图片位置。",
+    "- 老师当前轮没有重新指定的字段，优先沿用当前草稿、`session_memory` 和最近对话中的已确认值；不要要求老师重复提供已经存在的学科、知识点、难度、题型或内容模式。",
     "- 如果老师明确说“更难一点”“简单一点”“再难一些”等相对难度，并且当前试题规范已有难度，就在 1-6 范围内上调或下调 1 级；如果当前没有难度，就先询问具体难度。",
     "- 如果老师没有重新指定学科、难度、算法或图片要求，不要静默改动这些已确认字段。",
     "- `portrait_state.status` 只有在试题规范真正可生成时才设为 `ready`。",
-    "- 如果 `content_mode` 是 `image`，必须明确图片放在题干、选项或解析中的哪一处，或明确 `image_targets`，才可设为 `ready`。",
+    "- 如果 `content_mode` 是 `image`，且老师没有指定图片位置，使用业务默认题干图后即可设为 `ready`；只有图片需求本身不明确时才追问。",
     "- 如果“最近已生成题目 JSON”不是空对象，老师后续普通消息默认是在讨论或修改这道已生成题；不要自动展示旧表单，也不要要求重新填表。",
     "- 只有老师明确要求新建或重填表单，或者你先询问是否需要新表单且老师明确同意，`ui_actions.show_spec_form` 才能为 true；否则保持 false。",
     "- 老师要求改题干、选项、答案、解析、图片、难度或知识点时，优先用对话说明已理解的修改，并更新相关 `extracted_fields`；需要重新生成时等老师明确要求生成再输出 `generate_question`。",
@@ -820,6 +884,8 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     "示例 3 输出要点：如果当前试题规范已完整，teacher_intent=generate_question；如果仍有缺失字段，teacher_intent=continue_portrait 并追问缺失项。",
     "示例 4 输入：我想要更难一点的。",
     "示例 4 输出要点：如果当前 difficulty=3，则 difficulty=4；assistant_message=已把难度上调一级；不要改动已确认的学科、算法和图片要求。",
+    "示例 5 输入：我还需要一道带图题。上下文已有 subject=数学、knowledge_point=一次函数、difficulty=2、question_type=multiple_choice。",
+    "示例 5 输出要点：保留上下文已有字段；content_mode=image；image_mode=required；image_placement=stem_image；image_targets=[stem]；algorithm=direct；如果老师本轮要求生成则 teacher_intent=generate_question，否则询问是否现在生成。",
     "",
     `portrait_id: ${portraitId}`,
     "",
@@ -831,6 +897,8 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     "",
     "当前规范校验快照：",
     specBlock,
+    "当前长期记忆 session_memory JSON：",
+    memoryBlock,
     "",
     "最近已生成题目 JSON：",
     generatedQuestionBlock,
@@ -840,6 +908,78 @@ function buildRemotePrompt(document: QuestionPortraitDocument | null, teacherMes
     "",
     "老师当前消息：",
     teacherMessage || "老师还没有提供消息，请先询问要考查哪个知识点。",
+  ].join("\n");
+}
+
+function buildIntentPortraitSnapshot(document: QuestionPortraitDocument | null): Record<string, unknown> | null {
+  if (!document) {
+    return null;
+  }
+  const messages = (document.messages || [])
+    .filter((message) => !message.kind || message.kind === "text" || message.kind === "notice")
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+      created_at: message.created_at,
+    }))
+    .slice(-8);
+
+  return {
+    portrait_id: document.portrait_id,
+    status: document.status,
+    pending_field: document.pending_field,
+    draft: document.draft,
+    spec_status: document.spec.status,
+    validation_errors: document.validation_errors,
+    guidance: document.guidance,
+    session_memory: document.session_memory || buildQuestionPortraitMemory(document),
+    recent_messages: messages,
+  };
+}
+
+function buildIntentRecognitionPrompt(input: {
+  previousPortrait: QuestionPortraitDocument | null;
+  completedPortrait: QuestionPortraitDocument;
+  teacherMessage: string;
+  dialogueAssistantMessage: string;
+  dialogueTeacherIntent: QuestionPortraitTeacherIntent;
+}): string {
+  const payload = {
+    previous_portrait: buildIntentPortraitSnapshot(input.previousPortrait),
+    completed_portrait: buildIntentPortraitSnapshot(input.completedPortrait),
+    current_teacher_message: input.teacherMessage,
+    dialogue_agent_output: {
+      assistant_message: input.dialogueAssistantMessage,
+      teacher_intent: input.dialogueTeacherIntent,
+    },
+  };
+
+  return [
+    "你是 EduQG 的意图识别子 agent。你的任务不是抽取字段，也不是生成题目，只判断老师当前这一轮是否在语义上授权系统立刻进入出题生成流程。",
+    "",
+    "必须基于语义、上下文和状态转移判断，不允许用固定触发词、关键词表或正则式思维做判断。",
+    "判断时同时看：上一轮试题规范状态、老师当前消息、对话 agent 已抽取后的规范状态、对话 agent 的候选意图。",
+    "`session_memory` 是长期记忆，`recent_messages` 是短期上下文；teacher_profile/student_profile 只是画像信号，不等于对话记忆。",
+    "",
+    "输出 `generate_question` 的必要条件：",
+    "- completed_portrait.spec_status 必须是 ready，且没有阻塞性 validation_errors。",
+    "- 老师当前轮的语义动作是在请求生成、授权生成、接受上一轮确认并交给系统继续，或在规范已 ready 后追问为什么还没有进入出题结果。",
+    "- 老师当前轮没有表达暂停、否定、继续修改、只询问信息、或需要先看表单再决定。",
+    "",
+    "输出 `continue_portrait` 的条件：",
+    "- 规范仍未 ready，或当前轮主要是在新增、修改或澄清出题要求。",
+    "- 当前轮语义不确定，或者只是在寒暄、询问能力、要求解释、要求展示表单。",
+    "- 老师表达了先不要生成、稍后再说、需要继续调整，或与生成授权相冲突。",
+    "",
+    "只返回 JSON，不要 Markdown，不要解释 JSON 之外的内容：",
+    "{",
+    '  "teacher_intent": "continue_portrait | generate_question",',
+    '  "confidence": 0.0,',
+    '  "reasoning": "一句简短中文理由，说明语义依据"',
+    "}",
+    "",
+    "输入上下文 JSON：",
+    JSON.stringify(payload, null, 2),
   ].join("\n");
 }
 
@@ -916,6 +1056,23 @@ function parseRemotePortraitReply(
   }
 }
 
+function parseRemoteIntentRecognitionReply(text: string): RemoteIntentRecognitionResult {
+  try {
+    const parsed = JSON.parse(extractJsonObject(text)) as RemoteIntentRecognitionReply;
+    return {
+      teacherIntent: normalizeTeacherIntent(parsed.teacher_intent),
+      confidence: normalizeConfidence(parsed.confidence),
+      reasoning: normalizeString(parsed.reasoning),
+    };
+  } catch {
+    return {
+      teacherIntent: "continue_portrait",
+      confidence: 0,
+      reasoning: "intent recognizer did not return valid JSON",
+    };
+  }
+}
+
 function extractAssistantMessage(text: string): string {
   let jsonObject = "";
   try {
@@ -963,202 +1120,32 @@ function sanitizeRemoteAssistantMessage(text: string): string {
     .trim();
 }
 
-function hasGeneratedQuestion(document: QuestionPortraitDocument): boolean {
-  return document.messages.some((item) => normalizeString(item.kind) === "generated_question");
-}
-
-function requestsOptionImages(message: string): boolean {
-  const text = normalizeWhitespace(message).toLowerCase();
-  const mentionsOptions = text.includes("选项")
-    || text.includes("a/b/c/d")
-    || text.includes("abcd")
-    || text.includes("四个答案")
-    || text.includes("四个选项");
-  const mentionsImages = text.includes("配图")
-    || text.includes("图片")
-    || text.includes("小图")
-    || text.includes("示意图")
-    || text.includes("图");
-  if (!text || ((text.includes("不要") || text.includes("不用") || text.includes("取消") || text.includes("去掉") || text.includes("删除") || text.includes("移除")) && mentionsOptions && mentionsImages)) {
-    return false;
-  }
-  return mentionsOptions && mentionsImages;
-}
-
-function requestsImmediateGeneration(message: string): boolean {
-  const text = normalizeWhitespace(message);
-  return /(重新|再|现在|马上|直接|开始).{0,8}(生成|出题)/.test(text)
-    || /(生成|出题).{0,8}(一下|一遍|一次|吧)/.test(text);
-}
-
-function rejectsGenerationConfirmation(message: string): boolean {
-  const text = normalizeWhitespace(message);
-  return /不要|不用|先别|别生成|不生成|不出题|取消|等一下|等等|先不|暂时不|不用了/.test(text);
-}
-
-function acceptsGenerationConfirmation(message: string): boolean {
-  const text = normalizeWhitespace(message);
-  if (!text || rejectsGenerationConfirmation(text)) {
-    return false;
-  }
-  if (requestsImmediateGeneration(text)) {
-    return true;
-  }
-
-  const compact = text.replace(/[\s，。！？!?、,.；;：:]/g, "").toLowerCase();
-  return new Set([
-    "可以",
-    "可以的",
-    "好",
-    "好的",
-    "行",
-    "行的",
-    "没问题",
-    "确认",
-    "确定",
-    "是",
-    "是的",
-    "对",
-    "对的",
-    "嗯",
-    "嗯嗯",
-    "开始",
-    "开始吧",
-    "生成",
-    "生成吧",
-    "重新生成",
-    "现在生成",
-    "按这个生成",
-    "按这样生成",
-    "就这样",
-    "就这样吧",
-  ]).has(compact);
-}
-
-function getLatestAssistantLocalAdjustmentType(document: QuestionPortraitDocument): string {
-  for (let index = document.messages.length - 1; index >= 0; index -= 1) {
-    const message = document.messages[index];
+function annotateLatestAssistantIntent(
+  portrait: QuestionPortraitDocument,
+  teacherIntent: QuestionPortraitTeacherIntent,
+): QuestionPortraitDocument {
+  for (let index = portrait.messages.length - 1; index >= 0; index -= 1) {
+    const message = portrait.messages[index];
     if (message.role !== "assistant") {
       continue;
     }
-    if (!isRecord(message.payload)) {
-      return "";
-    }
-    const adjustment = message.payload.local_adjustment;
-    return isRecord(adjustment) ? normalizeString(adjustment.type) : "";
+    const payload = isRecord(message.payload) ? message.payload : {};
+    return {
+      ...portrait,
+      messages: portrait.messages.map((item, itemIndex) => (
+        itemIndex === index
+          ? {
+              ...item,
+              payload: {
+                ...payload,
+                teacher_intent: teacherIntent,
+              },
+            }
+          : item
+      )),
+    };
   }
-  return "";
-}
-
-function applyOptionImageAdjustment(draft: QuestionPortraitDraft): void {
-  draft.question_type = "multiple_choice";
-  draft.content_mode = "image";
-  draft.image_mode = draft.image_mode === "optional" ? "optional" : "required";
-  draft.image_placement = "option_image";
-  draft.image_targets = ["options"];
-  draft.teacher_profile.visual_policy = uniqueStrings([
-    "选项配图需要覆盖 A/B/C/D 四个选项，优先使用四分区或并列小图。",
-    draft.teacher_profile.visual_policy || "",
-  ]).join(" ");
-}
-
-function tryBuildLocalGeneratedQuestionAdjustment(
-  current: QuestionPortraitDocument,
-  message: string,
-  now: string,
-  teacherPayload?: unknown,
-  teacherAlreadyAppended = false,
-): QuestionPortraitTurnResult | null {
-  if (!hasGeneratedQuestion(current) || !requestsOptionImages(message)) {
-    return null;
-  }
-
-  const nextDraft = cloneDraft(current.draft);
-  applyOptionImageAdjustment(nextDraft);
-  const shouldGenerate = requestsImmediateGeneration(message);
-  const assistantMessage = shouldGenerate
-    ? "可以，我已把图片要求改为选项配图，并要求 A/B/C/D 用分区或小图分别呈现；现在按这个要求重新生成。"
-    : "可以，我已把图片要求改为选项配图，并要求 A/B/C/D 用分区或小图分别呈现。要我现在按这个要求重新生成吗？";
-  const portrait = createDerivedPortrait(
-    current.portrait_id,
-    current.owner_uid,
-    nextDraft,
-    [
-      ...buildMessageListWithTeacher(current.messages, message, now, teacherPayload, teacherAlreadyAppended),
-      {
-        role: "assistant",
-        content: assistantMessage,
-        created_at: now,
-        payload: {
-          ui_actions: {
-            show_spec_form: false,
-          },
-          local_adjustment: {
-            type: "option_images",
-          },
-        },
-      },
-    ],
-    current.created_at,
-    now,
-    current.markdown_path,
-    current.remote_session,
-    buildCurrentPortraitState(current),
-  );
-
-  return {
-    portrait,
-    assistant_message: assistantMessage,
-    teacher_intent: shouldGenerate ? resolveTeacherIntent("generate_question", portrait) : "continue_portrait",
-  };
-}
-
-function tryBuildLocalAdjustmentConfirmation(
-  current: QuestionPortraitDocument,
-  message: string,
-  now: string,
-  teacherPayload?: unknown,
-  teacherAlreadyAppended = false,
-): QuestionPortraitTurnResult | null {
-  if (getLatestAssistantLocalAdjustmentType(current) !== "option_images" || !acceptsGenerationConfirmation(message)) {
-    return null;
-  }
-
-  const nextDraft = cloneDraft(current.draft);
-  applyOptionImageAdjustment(nextDraft);
-  const assistantMessage = "已确认按选项配图要求重新生成。我现在开始出题。";
-  const portrait = createDerivedPortrait(
-    current.portrait_id,
-    current.owner_uid,
-    nextDraft,
-    [
-      ...buildMessageListWithTeacher(current.messages, message, now, teacherPayload, teacherAlreadyAppended),
-      {
-        role: "assistant",
-        content: assistantMessage,
-        created_at: now,
-        payload: {
-          ui_actions: {
-            show_spec_form: false,
-          },
-          local_adjustment_confirmed: {
-            type: "option_images",
-          },
-        },
-      },
-    ],
-    current.created_at,
-    now,
-    current.markdown_path,
-    current.remote_session,
-    buildCurrentPortraitState(current),
-  );
-
-  return {
-    portrait,
-    assistant_message: assistantMessage,
-    teacher_intent: resolveTeacherIntent("generate_question", portrait),
-  };
+  return portrait;
 }
 
 function createDerivedPortrait(
@@ -1172,6 +1159,17 @@ function createDerivedPortrait(
   remoteSession: QuestionPortraitRemoteSession | null,
   remoteState: unknown,
 ): QuestionPortraitDocument {
+  if (!draft.algorithm) {
+    draft.algorithm = "direct";
+  }
+  if (draft.content_mode === "image") {
+    applyImageDefaults(draft);
+  } else if (draft.content_mode === "text") {
+    draft.image_mode = "none";
+    draft.image_placement = "";
+    draft.image_targets = [];
+  }
+
   const normalizeInput: Record<string, unknown> = {
     request_uuid: portraitId,
     subject: draft.subject,
@@ -1233,6 +1231,7 @@ function createDerivedPortrait(
     updated_at: updatedAt,
   };
 
+  document.session_memory = buildQuestionPortraitMemory(document);
   document.markdown = renderPortraitMarkdown(document);
   return document;
 }
@@ -1321,6 +1320,33 @@ async function runRemoteDialogueTurn(
   return parseRemotePortraitReply(result.text);
 }
 
+async function runRemoteIntentRecognitionTurn(
+  remoteSession: QuestionPortraitRemoteSession,
+  requestId: string,
+  prompt: string,
+): Promise<RemoteIntentRecognitionResult> {
+  const config = getOahIntentConfig();
+  const dialogueTimeoutMs = getPortraitDialogueTimeoutMs();
+  const client = await createOahSessionClient({
+    baseUrl: config.baseUrl,
+    requestId,
+    sessionTitle: `Tutor intent recognition ${requestId}`,
+    agentName: config.intentAgentName,
+    activeSessionAgentName: config.intentAgentName,
+    modelRef: config.intentModel || undefined,
+    workspaceId: remoteSession.workspace_id,
+    workspaceRuntime: config.workspaceRuntime || undefined,
+    workspaceName: config.workspaceName || undefined,
+    workspaceOwnerId: config.workspaceOwnerId || undefined,
+    workspaceServiceName: config.workspaceServiceName || undefined,
+    workspaceAutoCreate: config.workspaceAutoCreate,
+    requestTimeoutMs: dialogueTimeoutMs,
+    runTimeoutMs: dialogueTimeoutMs,
+  });
+  const result = await client.send(prompt);
+  return parseRemoteIntentRecognitionReply(result.text);
+}
+
 function resolveTeacherIntent(
   requestedIntent: QuestionPortraitTeacherIntent,
   portrait: QuestionPortraitDocument,
@@ -1331,6 +1357,40 @@ function resolveTeacherIntent(
   return portrait.status === "ready" && portrait.spec.status === "ready"
     ? "generate_question"
     : "continue_portrait";
+}
+
+async function resolveTeacherIntentForCompletedTurn(
+  remoteSession: QuestionPortraitRemoteSession,
+  requestedIntent: QuestionPortraitTeacherIntent,
+  portrait: QuestionPortraitDocument,
+  previousPortrait: QuestionPortraitDocument | null,
+  teacherMessage: string,
+  dialogueAssistantMessage: string,
+): Promise<QuestionPortraitTeacherIntent> {
+  const resolvedIntent = resolveTeacherIntent(requestedIntent, portrait);
+  if (portrait.status !== "ready" || portrait.spec.status !== "ready") {
+    return "continue_portrait";
+  }
+
+  try {
+    const recognized = await runRemoteIntentRecognitionTurn(
+      remoteSession,
+      `${portrait.portrait_id}-intent-${Date.now()}`,
+      buildIntentRecognitionPrompt({
+        previousPortrait,
+        completedPortrait: portrait,
+        teacherMessage,
+        dialogueAssistantMessage,
+        dialogueTeacherIntent: requestedIntent,
+      }),
+    );
+    if (recognized.confidence >= 0.55) {
+      return resolveTeacherIntent(recognized.teacherIntent, portrait);
+    }
+  } catch {
+    return resolvedIntent;
+  }
+  return resolvedIntent;
 }
 
 export async function createQuestionPortrait(
@@ -1393,10 +1453,17 @@ export async function createQuestionPortrait(
     remoteSession,
     remoteReply.portraitState,
   );
-  const teacherIntent = resolveTeacherIntent(remoteReply.teacherIntent, portrait);
+  const teacherIntent = await resolveTeacherIntentForCompletedTurn(
+    remoteSession,
+    remoteReply.teacherIntent,
+    portrait,
+    null,
+    normalizedMessage,
+    remoteReply.assistantMessage,
+  );
 
   return {
-    portrait,
+    portrait: annotateLatestAssistantIntent(portrait, teacherIntent),
     assistant_message: remoteReply.assistantMessage,
     teacher_intent: teacherIntent,
   };
@@ -1451,28 +1518,6 @@ export async function completeQuestionPortraitTeacherReply(
 
   const now = new Date().toISOString();
   const promptMessage = buildPromptMessageWithAttachments(message, teacherPayload);
-  const localConfirmation = tryBuildLocalAdjustmentConfirmation(
-    current,
-    message,
-    now,
-    teacherPayload,
-    teacherAlreadyAppended,
-  );
-  if (localConfirmation) {
-    return localConfirmation;
-  }
-
-  const localAdjustment = tryBuildLocalGeneratedQuestionAdjustment(
-    current,
-    message,
-    now,
-    teacherPayload,
-    teacherAlreadyAppended,
-  );
-  if (localAdjustment) {
-    return localAdjustment;
-  }
-
   let remoteSession = current.remote_session || await createRemoteSession(current.portrait_id);
   const buildCurrentWithTeacher = (session: QuestionPortraitRemoteSession): QuestionPortraitDocument => createDerivedPortrait(
     current.portrait_id,
@@ -1533,10 +1578,17 @@ export async function completeQuestionPortraitTeacherReply(
     remoteSession,
     remoteReply.portraitState,
   );
-  const teacherIntent = resolveTeacherIntent(remoteReply.teacherIntent, portrait);
+  const teacherIntent = await resolveTeacherIntentForCompletedTurn(
+    remoteSession,
+    remoteReply.teacherIntent,
+    portrait,
+    current,
+    message,
+    remoteReply.assistantMessage,
+  );
 
   return {
-    portrait,
+    portrait: annotateLatestAssistantIntent(portrait, teacherIntent),
     assistant_message: remoteReply.assistantMessage,
     teacher_intent: teacherIntent,
   };

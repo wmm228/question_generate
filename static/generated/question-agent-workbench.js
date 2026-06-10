@@ -81,6 +81,7 @@ class QuestionAgentWorkbenchApp {
     contentModeSelect = requireElement("content-mode");
     imageModeSelect = requireElement("image-mode");
     imagePlacementSelect = requireElement("image-placement");
+    imagePlacementField = requireElement("image-placement-field");
     imageControls = requireElement("image-controls");
     requestBadges = requireElement("request-badges");
     requestSummary = requireElement("request-summary");
@@ -125,6 +126,7 @@ class QuestionAgentWorkbenchApp {
     authMode = "login";
     sessionSearchQuery = "";
     dialogueScrollTimerId = null;
+    inspectorScrollTimerId = null;
     hiddenHistoryIds = new Set(this.readLocalStringArray("hidden_history_ids"));
     submittedFeedbackRequestIds = new Set(this.readLocalStringArray("submitted_feedback_request_ids"));
     historyTitleOverrides = this.readLocalStringRecord("history_title_overrides");
@@ -144,6 +146,8 @@ class QuestionAgentWorkbenchApp {
     queuedTeacherMessage = "";
     queuedTeacherAttachments = [];
     portraitPollTimerId = null;
+    handledPortraitGenerationIntentKeys = new Set();
+    portraitGenerationIntentInFlight = false;
     async init() {
         this.bindEvents();
         this.hydrateFromQuery();
@@ -151,7 +155,12 @@ class QuestionAgentWorkbenchApp {
         const restored = await this.store.restoreSession();
         if (restored) {
             this.hideLogin();
-            this.setFeedback(this.generateFeedback, "工作台已连接。", "ok");
+            if (this.isGenerationInProgress()) {
+                this.renderGenerationFeedbackFromProgress();
+            }
+            else {
+                this.setFeedback(this.generateFeedback, "工作台已连接。", "ok");
+            }
         }
         else {
             this.showLogin();
@@ -234,6 +243,7 @@ class QuestionAgentWorkbenchApp {
         });
         this.bindResizeHandles();
         this.bindDialogueScrollbar();
+        this.bindInspectorScrollbar();
         this.sessionSearchInput.addEventListener("input", () => {
             this.sessionSearchQuery = normalizeString(this.sessionSearchInput.value).toLowerCase();
             this.renderSessionHistory();
@@ -599,7 +609,10 @@ class QuestionAgentWorkbenchApp {
             return;
         }
         this.portraitPollTimerId = window.setInterval(() => {
-            void this.store.refreshActivePortrait().catch(() => undefined);
+            void (async () => {
+                await this.store.refreshActivePortrait();
+                await this.maybeGenerateFromPortraitIntent();
+            })().catch(() => undefined);
         }, 2500);
     }
     renderSessionStrip() {
@@ -831,6 +844,19 @@ class QuestionAgentWorkbenchApp {
         const validationErrors = Array.isArray(portrait.validation_errors) ? portrait.validation_errors || [] : [];
         return pendingField !== "none" || missingItems.length > 0 || validationErrors.length > 0;
     }
+    portraitHasGenerationDraft(portrait) {
+        if (!portrait || !this.isRecord(portrait.draft)) {
+            return false;
+        }
+        const draft = portrait.draft;
+        return Boolean(normalizeString(draft.subject)
+            || normalizeString(draft.knowledge_point)
+            || normalizeString(draft.difficulty)
+            || normalizeString(draft.question_type)
+            || normalizeString(draft.content_mode)
+            || normalizeString(draft.algorithm)
+            || normalizeString(draft.image_placement));
+    }
     isDialogueServiceError(content, kind = "") {
         const text = this.formatWorkbenchCopy(content).toLowerCase();
         if (kind === "error") {
@@ -858,6 +884,7 @@ class QuestionAgentWorkbenchApp {
         document.body.classList.toggle("has-portrait", hasVisibleConversation);
         document.body.classList.toggle("has-active-request", hasActiveRequest);
         document.body.classList.toggle("is-waiting-assistant", this.waitingForAssistant || portraitAwaitingAssistant);
+        document.body.classList.toggle("is-generating-question", this.isGenerationInProgress());
         document.body.classList.toggle("show-spec-form", showSpecForm);
         this.portraitReplyInput.placeholder = hasVisibleConversation
             ? "补充出题要求，例如：难度先定 3，题型用简答题，暂时不要图片。"
@@ -960,15 +987,28 @@ class QuestionAgentWorkbenchApp {
             || this.localTeacherNotice
             || this.localAssistantNotice);
     }
+    isGenerationInProgress() {
+        const requestId = normalizeString(this.store.state.currentRequestId);
+        if (!requestId || this.findDisplayGeneratedResult()) {
+            return false;
+        }
+        const snapshot = this.store.state.progressSnapshot;
+        return !snapshot || !snapshot.finished;
+    }
     shouldShowSpecForm() {
+        if (this.isGenerationInProgress()) {
+            return false;
+        }
         const portrait = this.store.state.portraitDocument;
         if (portrait) {
             return this.canShowSpecFormForPortrait(portrait);
         }
-        return Boolean(this.requestFormOpened
-            || this.store.state.generatedResult);
+        return Boolean(this.requestFormOpened);
     }
     canShowSpecFormForPortrait(portrait) {
+        if (this.isGenerationInProgress()) {
+            return false;
+        }
         if (!portrait || this.waitingForAssistant || this.isPortraitAwaitingAssistant(portrait)) {
             return false;
         }
@@ -984,7 +1024,10 @@ class QuestionAgentWorkbenchApp {
         if (kind === "generated_question") {
             return false;
         }
-        return this.requestFormOpened || this.portraitNeedsSpecForm(portrait) || this.messageRequestsSpecForm(latestAssistant);
+        return this.requestFormOpened
+            || this.portraitNeedsSpecForm(portrait)
+            || this.messageRequestsSpecForm(latestAssistant)
+            || this.portraitHasGenerationDraft(portrait);
     }
     readDialogueScrollState() {
         const scrollTop = this.portraitChat.scrollTop;
@@ -1176,19 +1219,21 @@ class QuestionAgentWorkbenchApp {
         const requestId = normalizeString(this.store.state.currentRequestId);
         const snapshot = this.store.state.progressSnapshot;
         if (!requestId
-            || !snapshot
-            || snapshot.finished
+            || snapshot?.finished
             || this.store.state.generatedResult
             || this.store.hasGeneratedQuestionMessage(requestId)) {
             return "";
         }
-        const lastStage = this.resolveLastProgressStage(snapshot.stages);
-        const detail = lastStage
+        const lastStage = snapshot ? this.resolveLastProgressStage(snapshot.stages) : null;
+        const detail = snapshot && lastStage
             ? `${translateProgressText(lastStage.label || lastStage.key)}：${translateProgressText(lastStage.detail || "处理中")}`
-            : "服务器已接收请求";
+            : snapshot
+                ? "服务器已接收请求"
+                : "正在等待服务器接收请求";
+        const updatedAt = snapshot?.updatedAt || new Date().toISOString();
         return `
       <div class="dialogue-item dialogue-item-assistant">
-        <div class="dialogue-thinking-line dialogue-generation-progress" title="${escapeHtml(this.formatDialogueTimestamp(snapshot.updatedAt || new Date().toISOString()))}">
+        <div class="dialogue-thinking-line dialogue-generation-progress" title="${escapeHtml(this.formatDialogueTimestamp(updatedAt))}">
           AI 出题进行中，${escapeHtml(detail)}<span class="thinking-dots">...</span>
         </div>
       </div>
@@ -1328,7 +1373,7 @@ class QuestionAgentWorkbenchApp {
       </div>
     `;
     }
-    renderGeneratedQuestionCard(result, requestId = "", portraitId = "") {
+    renderGeneratedQuestionCard(result, requestId = "", portraitId = "", includeActions = true) {
         const stemImage = resolveStemImageSrc(result);
         const explanationImage = resolveExplanationImageSrc(result);
         const optionImageMap = resolveOptionImageMap(result);
@@ -1341,42 +1386,78 @@ class QuestionAgentWorkbenchApp {
         const sharedOptionImage = uniqueOptionImages.length === 1 && populatedOptionImages.length > 1
             ? uniqueOptionImages[0]
             : "";
-        const optionMarkup = result.options.length > 0
-            ? `${sharedOptionImage ? `<div class="result-inline-image result-option-image"><img src="${escapeHtml(sharedOptionImage)}" alt="选项配图"></div>` : ""}<ol class="result-options">${result.options.map((option, index) => {
+        const visualItems = [];
+        if (stemImage) {
+            visualItems.push({ src: stemImage, label: "题图", alt: "题干配图" });
+        }
+        if (sharedOptionImage) {
+            visualItems.push({ src: sharedOptionImage, label: "选项图", alt: "选项配图" });
+        }
+        else {
+            optionImages.forEach((imageSrc, index) => {
+                if (!imageSrc) {
+                    return;
+                }
                 const optionKey = String.fromCharCode(65 + index);
-                const imageSrc = optionImageMap.get(optionKey);
-                return `<li>${renderMathText(stripOptionPrefix(option))}${imageSrc && imageSrc !== sharedOptionImage ? `<div class="option-image"><img src="${escapeHtml(imageSrc)}" alt="option-${optionKey}"></div>` : ""}</li>`;
+                visualItems.push({ src: imageSrc, label: `选项 ${optionKey}`, alt: `选项 ${optionKey} 配图` });
+            });
+        }
+        if (explanationImage) {
+            visualItems.push({ src: explanationImage, label: "解析图", alt: "解析配图" });
+        }
+        const optionMarkup = result.options.length > 0
+            ? `<ol class="result-options">${result.options.map((option, index) => {
+                const optionKey = String.fromCharCode(65 + index);
+                const optionText = stripOptionPrefix(option) || optionKey;
+                return `<li>${renderMathText(optionText)}</li>`;
             }).join("")}</ol>`
             : "<div>暂无选项</div>";
         const stepsMarkup = result.solution_steps.length > 0
             ? `<ol class="result-steps">${result.solution_steps.map((step) => `<li>${renderMathText(step)}</li>`).join("")}</ol>`
             : "<div>暂无解析</div>";
+        const visualMarkup = visualItems.length > 0
+            ? `
+        <aside class="result-visual-panel result-visual-panel-count-${Math.min(visualItems.length, 4)}" aria-label="题目图片">
+          <div class="result-visual-grid">
+            ${visualItems.map((item) => `
+              <figure class="result-visual-item">
+                <figcaption>${escapeHtml(item.label)}</figcaption>
+                <div class="result-visual-frame">
+                  <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.alt)}">
+                </div>
+              </figure>
+            `).join("")}
+          </div>
+        </aside>
+      `
+            : "";
         return `
-      <div class="result-card result-question-card">
-        <section class="result-section">
-          <h3>题干</h3>
-          <div class="math-block">${renderMathText(result.question)}</div>
-          ${stemImage ? `<div class="result-inline-image"><img src="${escapeHtml(stemImage)}" alt="题干配图"></div>` : ""}
-        </section>
-        <section class="result-section">
-          <h3>选项</h3>
-          ${optionMarkup}
-        </section>
-        <section class="result-section">
-          <h3>解析</h3>
-          ${stepsMarkup}
-          ${explanationImage ? `<div class="result-inline-image"><img src="${escapeHtml(explanationImage)}" alt="解析配图"></div>` : ""}
-        </section>
-        <section class="result-section result-answer-section">
-          <h3>正确答案</h3>
-          <div class="result-answer">${renderMathText(result.ground_truth)}</div>
-        </section>
-        <div class="result-actions">
-          <button type="button" class="btn btn-secondary btn-compact" data-result-action="copy" data-request-id="${escapeHtml(requestId)}">复制题目</button>
-          <button type="button" class="btn btn-secondary btn-compact" data-result-action="edit" data-request-id="${escapeHtml(requestId)}">编辑</button>
-          <button type="button" class="btn btn-secondary btn-compact" data-result-action="export" data-format="word" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">导出 Word</button>
-          <button type="button" class="btn btn-ghost btn-compact" data-result-action="export" data-format="pdf" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">PDF</button>
-          <button type="button" class="btn btn-ghost btn-compact" data-result-action="export" data-format="excel" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">Excel</button>
+      <div class="result-card result-question-card${visualItems.length > 0 ? " has-visual" : ""}">
+        ${visualMarkup}
+        <div class="result-content-panel">
+          <section class="result-section">
+            <h3>题干</h3>
+            <div class="math-block">${renderMathText(result.question)}</div>
+          </section>
+          <section class="result-section">
+            <h3>选项</h3>
+            ${optionMarkup}
+          </section>
+          <section class="result-section">
+            <h3>解析</h3>
+            ${stepsMarkup}
+          </section>
+          <section class="result-section result-answer-section">
+            <h3>正确答案</h3>
+            <div class="result-answer">${renderMathText(result.ground_truth)}</div>
+          </section>
+          ${includeActions ? `<div class="result-actions">
+            <button type="button" class="btn btn-secondary btn-compact" data-result-action="copy" data-request-id="${escapeHtml(requestId)}">复制题目</button>
+            <button type="button" class="btn btn-secondary btn-compact" data-result-action="edit" data-request-id="${escapeHtml(requestId)}">编辑</button>
+            <button type="button" class="btn btn-secondary btn-compact" data-result-action="export" data-format="word" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">导出 Word</button>
+            <button type="button" class="btn btn-ghost btn-compact" data-result-action="export" data-format="pdf" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">PDF</button>
+            <button type="button" class="btn btn-ghost btn-compact" data-result-action="export" data-format="excel" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">Excel</button>
+          </div>` : ""}
         </div>
       </div>
     `;
@@ -1398,12 +1479,17 @@ class QuestionAgentWorkbenchApp {
             `题型：${questionType}`,
         ].join(" · ");
         return `
-      <details class="library-question-accordion" data-request-id="${escapeHtml(requestId)}">
+      <details class="library-question-accordion" data-request-id="${escapeHtml(requestId)}"${includeSurvey ? " open" : ""}>
         <summary title="${escapeHtml(preview || "暂无题干")}">
           <span class="library-question-title">${escapeHtml(summary)}</span>
+          <span class="library-question-card-actions" aria-label="题目操作">
+            <button type="button" class="btn btn-ghost btn-compact" data-result-action="copy" data-request-id="${escapeHtml(requestId)}">复制</button>
+            <button type="button" class="btn btn-secondary btn-compact" data-result-action="edit" data-request-id="${escapeHtml(requestId)}">编辑</button>
+            <button type="button" class="btn btn-ghost btn-compact" data-result-action="export" data-format="word" data-request-id="${escapeHtml(requestId)}" data-portrait-id="${escapeHtml(portraitId)}">导出</button>
+          </span>
         </summary>
         <div class="library-question-body">
-          ${this.renderGeneratedQuestionCard(result, requestId, portraitId)}
+          ${this.renderGeneratedQuestionCard(result, requestId, portraitId, false)}
           ${includeSurvey ? this.renderSurveyCard(requestId) : ""}
         </div>
       </details>
@@ -1602,7 +1688,7 @@ class QuestionAgentWorkbenchApp {
             `内容模式：${labels.content_mode_labels[payload.content_mode] || payload.content_mode || "待确认"}`,
             `算法：${labels.algorithm_labels[payload.algorithm] || payload.algorithm || "待确认"}`,
             payload.content_mode === "image"
-                ? `图片设置：${labels.image_mode_labels[payload.image_mode] || payload.image_mode} / ${labels.image_placement_labels[payload.image_placement] || payload.image_placement || "待确认"}`
+                ? `图片位置：${labels.image_placement_labels[payload.image_placement] || payload.image_placement || "待确认"}`
                 : "",
         ].filter(Boolean).join("\n");
     }
@@ -1820,6 +1906,7 @@ class QuestionAgentWorkbenchApp {
         const snapshot = this.store.state.progressSnapshot;
         const requestId = this.store.state.currentRequestId || "-";
         this.progressRequestId.textContent = `request_uuid: ${requestId}`;
+        this.renderGenerationFeedbackFromProgress();
         if (!snapshot) {
             this.progressView.innerHTML = `
         <div class="progress-item" data-state="pending">
@@ -1854,6 +1941,31 @@ class QuestionAgentWorkbenchApp {
         const logLines = snapshot.logs.map((line) => translateProgressText(line));
         this.progressLogs.textContent = [...summaryLines, "", ...logLines].filter((line, index, lines) => (line || (index > 0 && index < lines.length - 1))).join("\n") || "暂无日志。";
     }
+    renderGenerationFeedbackFromProgress() {
+        const generated = this.findDisplayGeneratedResult();
+        if (generated) {
+            this.setFeedback(this.generateFeedback, "题目生成完成。", "ok");
+            return;
+        }
+        const requestId = normalizeString(this.store.state.currentRequestId);
+        if (!requestId) {
+            return;
+        }
+        const snapshot = this.store.state.progressSnapshot;
+        if (snapshot?.finished && snapshot.error) {
+            this.setFeedback(this.generateFeedback, translateProgressText(snapshot.error), "error");
+            return;
+        }
+        if (snapshot?.finished) {
+            this.setFeedback(this.generateFeedback, "生成流程已结束，正在同步题目结果。", "neutral");
+            return;
+        }
+        const lastStage = snapshot ? this.resolveLastProgressStage(snapshot.stages) : null;
+        const detail = lastStage
+            ? `，${translateProgressText(lastStage.label || lastStage.key)}：${translateProgressText(lastStage.detail || "处理中")}`
+            : "";
+        this.setFeedback(this.generateFeedback, `规范状态 ready，正在生成题目${detail}。`, "neutral");
+    }
     resolveLastProgressStage(stages) {
         const stagesByPriority = [
             stages.filter((stage) => stage.state === "active" || stage.state === "error"),
@@ -1883,6 +1995,16 @@ class QuestionAgentWorkbenchApp {
                 : searched
                     ? "暂无匹配"
                     : "点击搜索";
+        if (!loading && !error && generated && libraryResults.length === 0) {
+            this.resultView.innerHTML = `
+        ${this.renderLibrarySearchPanel(1, statusText, loading)}
+        <div class="library-results-stack">
+          ${this.renderLibraryQuestionAccordion(generated.result, generated.requestId, true, normalizeString(this.store.state.portraitDocument?.portrait_id))}
+        </div>
+      `;
+            void this.typesetMath(this.resultView);
+            return;
+        }
         if (loading || error || libraryResults.length === 0) {
             this.resultView.innerHTML = `
         ${this.renderLibrarySearchPanel(0, statusText, loading)}
@@ -1918,8 +2040,9 @@ class QuestionAgentWorkbenchApp {
         this.portraitStartButton.disabled = !authenticated;
         this.portraitSendButton.disabled = !authenticated || this.sendingPortraitReply;
         this.portraitSyncButton.disabled = !authenticated;
-        this.validateButton.disabled = busy;
-        this.generateButton.disabled = busy;
+        const generationInProgress = this.isGenerationInProgress();
+        this.validateButton.disabled = busy || generationInProgress;
+        this.generateButton.disabled = busy || generationInProgress;
         this.refreshRuntimeButton.disabled = !authenticated || busy;
         this.sessionRefreshButton.disabled = !authenticated || busy;
         this.sessionOpenLatestButton.disabled = !authenticated || busy || this.store.state.portraitList.length === 0;
@@ -1943,7 +2066,7 @@ class QuestionAgentWorkbenchApp {
             this.imageModeSelect,
             this.imagePlacementSelect,
         ].forEach((element) => {
-            element.disabled = busy;
+            element.disabled = busy || generationInProgress;
         });
     }
     renderLayoutState() {
@@ -2029,6 +2152,33 @@ class QuestionAgentWorkbenchApp {
             this.portraitChat.classList.remove("is-scrolling");
         });
     }
+    bindInspectorScrollbar() {
+        const getActiveSection = () => (this.inspectorColumn.querySelector(".material-preview-pane > .inspector-section.is-active-preview"));
+        const reveal = () => {
+            const section = getActiveSection();
+            if (!section || section.scrollHeight <= section.clientHeight + 1) {
+                section?.classList.remove("is-scrolling");
+                return;
+            }
+            section.classList.add("is-scrolling");
+            if (this.inspectorScrollTimerId !== null) {
+                window.clearTimeout(this.inspectorScrollTimerId);
+            }
+            this.inspectorScrollTimerId = window.setTimeout(() => {
+                section.classList.remove("is-scrolling");
+                this.inspectorScrollTimerId = null;
+            }, 900);
+        };
+        this.inspectorColumn.addEventListener("wheel", reveal, { passive: true });
+        this.inspectorColumn.addEventListener("mouseleave", () => {
+            const section = getActiveSection();
+            if (this.inspectorScrollTimerId !== null) {
+                window.clearTimeout(this.inspectorScrollTimerId);
+                this.inspectorScrollTimerId = null;
+            }
+            section?.classList.remove("is-scrolling");
+        });
+    }
     toggleSidebar() {
         const layout = this.store.state.persisted.layout;
         layout.sidebarCollapsed = !layout.sidebarCollapsed;
@@ -2082,7 +2232,7 @@ class QuestionAgentWorkbenchApp {
             algorithm: this.algorithmSelect.value,
             question_type: this.questionTypeSelect.value,
             content_mode: contentMode,
-            image_mode: this.imageModeSelect.value,
+            image_mode: contentMode === "image" ? "required" : "none",
             image_placement: imagePlacement,
             image_targets: IMAGE_TARGET_BY_PLACEMENT[imagePlacement] || [],
         });
@@ -2090,10 +2240,14 @@ class QuestionAgentWorkbenchApp {
     }
     syncImageControls() {
         const isImageMode = this.contentModeSelect.value === "image";
-        this.imageControls.classList.toggle("hidden", !isImageMode);
+        this.imageControls.classList.add("hidden");
+        this.imagePlacementField.classList.toggle("hidden", !isImageMode);
         if (!isImageMode) {
             this.imageModeSelect.value = "none";
             this.imagePlacementSelect.value = "";
+        }
+        else {
+            this.imageModeSelect.value = "required";
         }
     }
     setAuthMode(mode) {
@@ -2191,6 +2345,7 @@ class QuestionAgentWorkbenchApp {
         try {
             await this.store.refreshWorkbenchData();
             await this.store.restorePortrait();
+            await this.store.restoreActiveGeneration();
             this.syncRequestFormOpenedFromPortrait();
             this.setFeedback(this.generateFeedback, "工作台配置已刷新。", "ok");
         }
@@ -2210,6 +2365,7 @@ class QuestionAgentWorkbenchApp {
         this.store.setBusy(true);
         try {
             await this.store.loadPortrait(portraitId);
+            await this.store.restoreActiveGeneration();
             this.syncRequestFormOpenedFromPortrait();
             this.setFeedback(this.portraitFeedback, "已切换到所选规范历史。", "ok");
         }
@@ -2648,6 +2804,8 @@ class QuestionAgentWorkbenchApp {
         if (!resultButton) {
             return;
         }
+        event.preventDefault();
+        event.stopPropagation();
         const action = normalizeString(resultButton.dataset.resultAction);
         const requestId = normalizeString(resultButton.dataset.requestId) || normalizeString(this.store.state.currentRequestId);
         const result = this.findGeneratedResult(requestId);
@@ -2803,6 +2961,55 @@ class QuestionAgentWorkbenchApp {
         return normalizeString(turn.teacher_intent) === "generate_question"
             && readyState.portraitReady
             && readyState.specReady;
+    }
+    getLatestPortraitGenerationIntentKey() {
+        const portrait = this.store.state.portraitDocument;
+        const readyState = getPortraitReadyState(portrait);
+        if (!portrait || !readyState.portraitReady || !readyState.specReady) {
+            return "";
+        }
+        const messages = Array.isArray(portrait.messages) ? portrait.messages : [];
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+            const message = messages[index];
+            if (normalizeString(message.role) !== "assistant") {
+                continue;
+            }
+            const kind = normalizeString(message.kind) || "text";
+            if (kind === "generated_question" || kind === "error") {
+                return "";
+            }
+            if (!this.isRecord(message.payload) || normalizeString(message.payload.teacher_intent) !== "generate_question") {
+                return "";
+            }
+            return [
+                normalizeString(portrait.portrait_id),
+                normalizeString(message.created_at),
+                normalizeString(message.content),
+            ].join("|");
+        }
+        return "";
+    }
+    async maybeGenerateFromPortraitIntent() {
+        if (this.portraitGenerationIntentInFlight
+            || this.sendingPortraitReply
+            || this.waitingForAssistant
+            || this.store.state.busy
+            || this.isPortraitAwaitingAssistant()
+            || this.isGenerationInProgress()) {
+            return;
+        }
+        const intentKey = this.getLatestPortraitGenerationIntentKey();
+        if (!intentKey || this.handledPortraitGenerationIntentKeys.has(intentKey)) {
+            return;
+        }
+        this.handledPortraitGenerationIntentKeys.add(intentKey);
+        this.portraitGenerationIntentInFlight = true;
+        try {
+            await this.handleGenerateFromPortraitTurn();
+        }
+        finally {
+            this.portraitGenerationIntentInFlight = false;
+        }
     }
     shouldSubmitOnEnter(event, compositionActive) {
         return (event.key === "Enter" &&

@@ -62,6 +62,7 @@ export interface ProgressSnapshot {
   updatedAt: string;
   finished: boolean;
   error?: string;
+  result?: GeneratedResult;
   stages: ProgressStage[];
   logs: string[];
 }
@@ -205,6 +206,7 @@ export interface PortraitDocumentEnvelope {
   status?: string;
   pending_field?: string;
   summary?: string;
+  session_memory?: Record<string, unknown>;
   guidance?: PortraitGuidanceEnvelope;
   draft?: Record<string, unknown>;
   spec?: Record<string, unknown>;
@@ -242,6 +244,11 @@ export interface PortraitListEnvelope {
 
 export interface PersistedWorkbenchState {
   activePortraitId: string;
+  activeGeneration: {
+    requestId: string;
+    portraitId: string;
+    startedAt: string;
+  } | null;
   latestKnowledgePointDraft: string;
   latestPortraitReplyDraft: string;
   requestDraft: Partial<GenerationPayload>;
@@ -297,6 +304,7 @@ export const IMAGE_TARGET_BY_PLACEMENT: Record<string, string[]> = {
 
 export const DEFAULT_PERSISTED_STATE: PersistedWorkbenchState = {
   activePortraitId: "",
+  activeGeneration: null,
   latestKnowledgePointDraft: "",
   latestPortraitReplyDraft: "",
   requestDraft: {

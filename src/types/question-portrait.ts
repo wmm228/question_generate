@@ -69,6 +69,15 @@ export interface QuestionPortraitGuidance {
   next_step: string;
 }
 
+export interface QuestionPortraitMemory {
+  version: "question-portrait-memory.v1";
+  summary: string;
+  stable_facts: string[];
+  open_items: string[];
+  dialogue_state: string[];
+  updated_at: string;
+}
+
 export interface QuestionPortraitDocument {
   portrait_id: string;
   owner_uid: string;
@@ -77,6 +86,7 @@ export interface QuestionPortraitDocument {
   pending_field: QuestionPortraitPendingField;
   summary: string;
   guidance: QuestionPortraitGuidance;
+  session_memory?: QuestionPortraitMemory;
   draft: QuestionPortraitDraft;
   spec: QuestionGenerationSpec;
   plan: QuestionAgentPlan;

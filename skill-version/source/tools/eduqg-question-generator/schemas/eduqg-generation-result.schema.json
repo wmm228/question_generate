@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "eduqg-generation-result.schema.json",
+  "title": "eduqg-generation-result.v1",
+  "type": "object",
+  "required": ["version", "status"],
+  "properties": {
+    "version": { "const": "eduqg-generation-result.v1" },
+    "status": { "enum": ["needs_clarification", "completed", "failed"] },
+    "request_id": { "type": "string" },
+    "missing_fields": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "spec": { "type": "object" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "type", "stem", "answer", "analysis", "metadata", "evaluation"],
+        "properties": {
+          "question_id": { "type": "string" },
+          "type": { "type": "string" },
+          "stem": { "type": "string" },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label", "text"],
+              "properties": {
+                "label": { "type": "string" },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "answer": {},
+          "analysis": { "type": "string" },
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "position", "description"],
+              "properties": {
+                "id": { "type": "string" },
+                "position": { "type": "string" },
+                "description": { "type": "string" },
+                "svg": { "type": "string" }
+              }
+            }
+          },
+          "metadata": { "type": "object" },
+          "evaluation": { "type": "object" }
+        }
+      }
+    },
+    "evaluation_summary": { "type": "object" },
+    "events": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}

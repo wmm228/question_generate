@@ -152,12 +152,14 @@ function normalizeStatusSnapshot(requestId: string, value: unknown): AiGenerateS
     return null;
   }
   const error = readString(value.error).trim();
+  const result = isRecord(value.result) ? value.result : undefined;
   return {
     requestId: readString(value.requestId).trim() || requestId,
     startedAt,
     updatedAt,
     finished: readBoolean(value.finished),
     error: error || undefined,
+    ...(result ? { result } : {}),
     stages,
     logs,
   };
@@ -546,13 +548,20 @@ export async function createTutorPostgresRuntime(
         return snapshot;
       });
     },
-    async finish(requestId: string, error?: string): Promise<AiGenerateStatusSnapshot> {
+    async finish(
+      requestId: string,
+      error?: string,
+      result?: Record<string, unknown>,
+    ): Promise<AiGenerateStatusSnapshot> {
       return runStatusLock(requestId, async () => {
         const snapshot = await ensureStatusSnapshotUnlocked(requestId);
         snapshot.updatedAt = nowIso();
         snapshot.finished = true;
         if (error) {
           snapshot.error = error;
+        }
+        if (result) {
+          snapshot.result = result;
         }
         await saveStatusSnapshot(snapshot);
         return snapshot;

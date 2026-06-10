@@ -45,6 +45,7 @@ export const IMAGE_TARGET_BY_PLACEMENT = {
 };
 export const DEFAULT_PERSISTED_STATE = {
     activePortraitId: "",
+    activeGeneration: null,
     latestKnowledgePointDraft: "",
     latestPortraitReplyDraft: "",
     requestDraft: {

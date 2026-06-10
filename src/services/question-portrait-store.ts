@@ -8,6 +8,7 @@ import type {
   QuestionPortraitRole,
 } from "../types/question-portrait";
 import { createAsyncKeyedLock } from "./async-lock";
+import { buildQuestionPortraitMemory } from "./question-portrait-memory";
 
 export interface QuestionPortraitListItem {
   portrait_id: string;
@@ -310,10 +311,14 @@ export function sanitizeQuestionPortraitDocument(
   document: QuestionPortraitDocument,
 ): QuestionPortraitDocument {
   const markdown = stripPortraitDialogueMarkdown(normalizeString(document.markdown));
-  return {
+  const normalizedDocument = {
     ...document,
     messages: normalizeQuestionPortraitMessages(document.messages),
     markdown: repairPortraitMarkdownSubjectField(markdown, document),
+  };
+  return {
+    ...normalizedDocument,
+    session_memory: buildQuestionPortraitMemory(normalizedDocument),
   };
 }
 

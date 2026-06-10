@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EduQG</title>
-<link rel="stylesheet" href="/static/question-agent-workbench.css?v=20260517-library-search-db">
+<link rel="stylesheet" href="/static/question-agent-workbench.css?v=20260518-generation-result-view">
 <script>
   MathJax = {
     tex: {
@@ -17,7 +17,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
-<script type="module" src="/static/generated/question-agent-workbench.js?v=20260517-library-search-db"></script>
+<script type="module" src="/static/generated/question-agent-workbench.js?v=20260518-generation-result-view"></script>
 </head>
 <body>
 <div id="login-mask" class="auth-overlay" aria-hidden="true">
@@ -263,16 +263,16 @@
                   <span>算法</span>
                   <select id="algorithm" name="algorithm"></select>
                 </label>
+                <label id="image-placement-field" class="field hidden">
+                  <span>图片位置</span>
+                  <select id="image-placement" name="image_placement"></select>
+                </label>
               </div>
 
               <div id="image-controls" class="chat-spec-grid chat-spec-grid-compact">
                 <label class="field">
                   <span>图片模式</span>
                   <select id="image-mode" name="image_mode"></select>
-                </label>
-                <label class="field">
-                  <span>图片位置</span>
-                  <select id="image-placement" name="image_placement"></select>
                 </label>
               </div>
 
