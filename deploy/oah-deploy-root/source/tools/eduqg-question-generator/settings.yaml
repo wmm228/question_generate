@@ -2,7 +2,7 @@ name: eduqg-question-generation-agent
 description: HTTP tool service for the migrated EDUQG question-generation agent.
 transport:
   type: http
-  base_url: http://127.0.0.1:8789
+  base_url: http://eduqg-tool:8789
 health:
   method: GET
   path: /health
@@ -23,7 +23,7 @@ tools:
     input_schema: schemas/edu-question-spec.schema.json
     output_schema: schemas/eduqg-generation-result.schema.json
   - name: run_evoq_text_question
-    description: Run the EvoQ route for text question generation and quality-oriented optimization.
+    description: Run configurable EvoQ GA text-question generation with population, evolution, selection, and quality optimization settings.
     method: POST
     path: /api/eduqg/run-evoq
     input_schema: schemas/edu-question-spec.schema.json
@@ -35,7 +35,7 @@ tools:
     input_schema: schemas/edu-question-spec.schema.json
     output_schema: schemas/eduqg-generation-result.schema.json
   - name: simulate_student_response
-    description: Simulate a likely student answer and misconception for a generated item.
+    description: Simulate a likely student answer with IRT ability/difficulty parameters, mastery signals, and misconceptions.
     method: POST
     path: /api/eduqg/simulate-student-response
     input_schema: schemas/edu-question-spec.schema.json

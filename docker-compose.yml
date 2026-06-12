@@ -1,19 +1,22 @@
 services:
   oah:
     build:
-      context: ../OpenAgentHarness
+      context: ../OpenAgentHarness-master
       dockerfile: Dockerfile.dev
     image: oah-dev:latest
     restart: unless-stopped
+    depends_on:
+      eduqg-tool:
+        condition: service_healthy
     environment:
       OAH_NATIVE_WORKSPACE_SYNC: "0"
       OAH_NATIVE_WORKSPACE_SYNC_PERSISTENT: "0"
     volumes:
       - ./oah/server.docker.yaml:/config/server.docker.yaml:ro
-      - ../oah_260421_v2/test_oah_server/source/models:/data/models:ro
-      - ../oah_260421_v2/test_oah_server/source/runtimes:/data/runtimes:ro
-      - ../oah_260421_v2/test_oah_server/source/tools:/data/tools:ro
-      - ../oah_260421_v2/test_oah_server/source/skills:/data/skills:ro
+      - ./deploy/oah-deploy-root/source/models:/data/models:ro
+      - ./deploy/oah-deploy-root/source/runtimes:/data/runtimes:ro
+      - ./deploy/oah-deploy-root/source/tools:/data/tools:ro
+      - ./deploy/oah-deploy-root/source/skills:/data/skills:ro
       - oah_runtime_state:/data/runtime-state
       - oah_workspace_data:/data/workspaces
     healthcheck:
@@ -28,6 +31,41 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  eduqg-tool:
+    image: node:24-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command:
+      [
+        "node",
+        "eduqg-question-generator/scripts/entrypoint.mjs",
+        "--serve",
+        "--mock",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8789"
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8789/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    env_file:
+      - .env.docker
+      - path: .env.docker.local
+        required: false
+    volumes:
+      - ../skill-version:/app:ro
+      - eduqg_tool_output:/app/eduqg-question-generator/out
 
   tutor:
     build:
@@ -90,6 +128,7 @@ services:
 volumes:
   oah_runtime_state:
   oah_workspace_data:
+  eduqg_tool_output:
   postgres_data:
   tutor_runtime_state:
   tutor_logs:

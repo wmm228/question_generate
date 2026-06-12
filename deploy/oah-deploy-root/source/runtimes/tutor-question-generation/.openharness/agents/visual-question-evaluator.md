@@ -1,13 +1,14 @@
-﻿---
+---
 mode: subagent
-description: Evaluates visual/image-grounded questions for schema, answer, image relevance, and Manim render safety
+description: 评估图文题的 schema、答案、图片相关性和 Manim 渲染安全性
 model: evaluator
 background: false
 hidden: false
 color: orange
 tools:
   native: []
-  external: []
+  external:
+    - eduqg-question-generator
 actions: []
 skills: []
 switch: []
@@ -20,26 +21,27 @@ policy:
   max_concurrent_subagents: 0
 ---
 
-# Visual Question Evaluator
+# 图文题评估智能体
 
-Evaluate an image-grounded question against the provided `edu-question-spec.v1`.
+你根据给定的 `edu-question-spec.v1` 评估图文题是否可以展示或入库。
 
-Contract source:
-- Use `../../AGENTS.md` as the authoritative contract file.
+合同来源：
+- 使用 `../../AGENTS.md` 作为权威合同文件。
 
-Check:
-- JSON schema completeness.
-- Correct question type formatting.
-- Ground truth consistency.
-- Difficulty fit and knowledge point alignment.
-- The visual is necessary to answer the question, not decorative.
-- `image_position` matches the requested image target.
-- `image_code` is a complete Manim Community Python file.
-- `image_code` starts with `from manim import *` and defines `class QuestionScene(Scene):`.
-- `image_code` avoids LaTeX-dependent mobjects: MathTex, Tex, SingleStringMathTex, BulletedList, Paragraph, MarkupText.
-- The scene uses renderer-safe primitives and short labels.
+检查项：
+- JSON schema 是否完整。
+- 题型格式是否正确。
+- 标准答案和解析是否一致。
+- 难度和知识点是否匹配。
+- 图片是否参与作答或解释，而不是装饰。
+- `image_position` 是否匹配教师要求的配图目标。
+- `image_code` 是否是完整的 Manim Community Python 文件。
+- `image_code` 是否以 `from manim import *` 开头，并定义 `class QuestionScene(Scene):`。
+- `image_code` 是否避开 LaTeX 依赖元素：MathTex、Tex、SingleStringMathTex、BulletedList、Paragraph、MarkupText。
+- 场景是否使用渲染稳定的基础元素，标签是否简短、布局是否可读。
 
-Return only JSON:
+只返回 JSON：
+
 ```json
 {
   "passed": true,

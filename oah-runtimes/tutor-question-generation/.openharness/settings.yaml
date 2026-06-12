@@ -1,30 +1,34 @@
 default_agent: question-orchestrator
 models:
   orchestrator:
-    ref: platform/kimi-k25
+    ref: platform/qwen_qwen3.5-397b-a17b
     temperature: 0.1
     top_p: 0.7
     max_tokens: 3072
   generator:
-    ref: platform/kimi-k25
+    ref: platform/qwen_qwen3.5-397b-a17b
     temperature: 0.35
     top_p: 0.9
   evaluator:
-    ref: platform/kimi-k25
+    ref: platform/qwen_qwen3.5-397b-a17b
     temperature: 0.05
     top_p: 0.6
   intent:
-    ref: platform/kimi-k25
+    ref: platform/qwen_qwen3.5-397b-a17b
     temperature: 0.0
     top_p: 0.5
     max_tokens: 1024
   simulator:
-    ref: platform/kimi-k25
+    ref: platform/qwen_qwen3.5-397b-a17b
     temperature: 0.2
     top_p: 0.8
+imports:
+  tools:
+    - eduqg-question-generator
+  skills:
+    - eduqg-question-generator
 engine:
   session_memory:
     enabled: true
   workspace_memory:
     enabled: true
-    write_policy: auto-extract

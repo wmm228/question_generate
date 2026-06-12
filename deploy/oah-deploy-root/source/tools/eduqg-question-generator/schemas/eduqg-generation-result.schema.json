@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "eduqg-generation-result.schema.json",
+  "title": "eduqg-generation-result.v1",
+  "type": "object",
+  "required": ["version", "status"],
+  "properties": {
+    "version": {
+      "enum": [
+        "eduqg-generation-result.v1",
+        "eduqg-render-result.v1",
+        "eduqg-evaluation-result.v1",
+        "eduqg-student-simulation-result.v1",
+        "eduqg-profile-result.v1",
+        "eduqg-tool-result.v1"
+      ]
+    },
+    "status": { "enum": ["needs_clarification", "completed", "failed"] },
+    "request_id": { "type": "string" },
+    "missing_fields": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "spec": { "type": "object" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "type", "stem", "answer", "analysis", "metadata", "evaluation"],
+        "properties": {
+          "question_id": { "type": "string" },
+          "type": { "type": "string" },
+          "stem": { "type": "string" },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label", "text"],
+              "properties": {
+                "label": { "type": "string" },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "answer": {},
+          "analysis": { "type": "string" },
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "position", "description"],
+              "properties": {
+                "id": { "type": "string" },
+                "position": { "type": "string" },
+                "description": { "type": "string" },
+                "svg": { "type": "string" }
+              }
+            }
+          },
+          "metadata": { "type": "object" },
+          "evaluation": { "type": "object" }
+        }
+      }
+    },
+    "evaluation_summary": { "type": "object" },
+    "validation": { "type": "object" },
+    "diagrams": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "simulated_student": { "type": "object" },
+    "irt": {
+      "type": "object",
+      "properties": {
+        "model": { "type": "string" },
+        "ability_theta": { "type": "number" },
+        "base_ability_theta": { "type": "number" },
+        "mastery_adjustment": { "type": "number" },
+        "difficulty_b": { "type": "number" },
+        "probability_correct": { "type": "number", "minimum": 0, "maximum": 1 },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sampled_correct": { "type": "boolean" },
+        "mastery_evidence": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "individual_irt": { "type": "object" },
+    "evoq_irt_ensemble": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string" },
+        "implementation_reference": { "type": "string" },
+        "method": { "type": "string" },
+        "model": { "type": "string" },
+        "formula": { "type": "string" },
+        "item_difficulty_b": { "type": "number" },
+        "virtual_student_count": { "type": "number" },
+        "responses": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "aggregate": { "type": "object" }
+      }
+    },
+    "response": {},
+    "is_correct": { "type": "boolean" },
+    "rationale": { "type": "string" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "item": { "type": "object" },
+    "profile_id": { "type": "string" },
+    "kind": { "type": "string" },
+    "profile": { "type": "object" },
+    "events": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}

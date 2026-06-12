@@ -27,4 +27,4 @@ sandbox:
   provider: embedded
 
 llm:
-  default_model: kimi-k26
+  default_model: qwen_qwen3.5-397b-a17b
