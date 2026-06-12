@@ -171,6 +171,9 @@ function buildReferenceLikeItemJson(candidate: EvoqPopulationCandidate): Record<
       : {},
     answer: candidate.raw.ground_truth,
     analysis: candidate.raw.solution_steps.join("\n"),
+    ...(candidate.raw.image_position ? { image_position: candidate.raw.image_position } : {}),
+    ...(candidate.raw.image_svg ? { image_svg: candidate.raw.image_svg } : {}),
+    ...(candidate.raw.render_notes ? { render_notes: candidate.raw.render_notes } : {}),
     reflection: candidate.review,
   };
 }
