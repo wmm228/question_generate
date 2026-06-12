@@ -20,6 +20,8 @@
 5. 只输出最终 JSON，不要输出解释或额外内容。
 
 输出格式：
+注意：下面示例只列出通用题目字段。若已确认规范中的 `content_mode` 为 `image`，最终 JSON 必须额外包含 `image_position`、`image_svg`、`render_notes`，并严格遵守上方生成约束中的安全 SVG 与图文一致性要求。
+
 {
   "question": "题目主干，不包含选项",
   "options": ["选项A内容", "选项B内容", "选项C内容", "选项D内容"],

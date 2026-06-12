@@ -14,6 +14,7 @@
 - 变异目标：对 weakness 指出的关键问题做“最小改动修复”，同时保持 strength 描述的优点不被破坏
 - 若题目已可行但难度偏离 {difficulty_target} 档位，则做最小幅度调整（改数字规模、增减一步推理、加删一个限制条件），不要完全重写成另一题
 - 必须重建 ground_truth 与 solution_steps 并自洽
+- 若已确认规范中的 `content_mode` 为 `image`，必须同步修复 image_position、image_svg、render_notes；image_svg 必须是完整、安全、可直接渲染的 SVG，并且图片信息必须参与作答。
 - 严格按照以下JSON格式输出，不要包含任何其他键（如 "Item" 或 "result"），不要嵌套：
 {
   "question": "题目描述...",
@@ -21,4 +22,5 @@
   "ground_truth": "A",
   "solution_steps": ["详细解析..."]
 }
+上面的 JSON 是文本题最低字段集合；图片题必须在同一层补齐 image_position、image_svg、render_notes。
 - 只输出JSON字符串，不要包含markdown代码块标记。

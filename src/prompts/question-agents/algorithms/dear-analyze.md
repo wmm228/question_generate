@@ -14,6 +14,8 @@
 {generation_constraints}
 
 **输出格式**:
+注意：下面的 `item` 示例只列出通用题目字段。若已确认规范中的 `content_mode` 为 `image`，`item` 必须额外包含 `image_position`、`image_svg`、`render_notes`，并严格遵守上方生成约束中的安全 SVG 与图文一致性要求。
+
 请输出 JSON 格式：
 {
   "item": {

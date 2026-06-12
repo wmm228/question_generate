@@ -18,6 +18,7 @@
 - options: 选择题选项数组，例如 ["选项A", "选项B", "选项C", "选项D"]；非选择题不要输出 options
 - ground_truth: 正确答案，例如 "A"
 - solution_steps: 解析步骤数组
+- 若已确认规范中的 `content_mode` 为 `image`，还必须包含 image_position、image_svg、render_notes；image_svg 必须是完整、安全、可直接渲染的 SVG，并且图片信息必须参与作答。
 
 Knowledge ID: {knowledge_id}
 Difficulty Target: {difficulty_target}

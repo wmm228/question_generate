@@ -17,6 +17,8 @@
 {generation_constraints}
 
 **输出格式**:
+注意：下面示例只列出通用题目字段。若已确认规范中的 `content_mode` 为 `image`，最终 JSON 必须额外包含 `image_position`、`image_svg`、`render_notes`，并严格遵守上方生成约束中的安全 SVG 与图文一致性要求。
+
 请严格输出且仅输出一个最终定稿 JSON 对象：
 {
   "question": "修订后的题干",
