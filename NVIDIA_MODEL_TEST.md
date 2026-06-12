@@ -6,16 +6,16 @@
 
 ```env
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_MODEL_NAME=nvidia/nemotron-3-nano-30b-a3b
+NVIDIA_MODEL_NAME=qwen/qwen3.5-397b-a17b
 ```
 
 这个模型对应原来 OAH 配置里的：
 
 ```env
-platform/nvidia_nemotron-3-nano-30b-a3b
+platform/qwen_qwen3.5-397b-a17b
 ```
 
-直连 NVIDIA API 时使用上面的 `nvidia/nemotron-3-nano-30b-a3b`。
+直连 NVIDIA API 时使用上面的 `qwen/qwen3.5-397b-a17b`。
 
 ## 配置密钥
 
@@ -30,7 +30,7 @@ Copy-Item .env.nvidia.example .env.nvidia.local
 ```env
 NVIDIA_API_KEY=你的 NVIDIA API key
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_MODEL_NAME=nvidia/nemotron-3-nano-30b-a3b
+NVIDIA_MODEL_NAME=qwen/qwen3.5-397b-a17b
 NVIDIA_MAX_THINKING_TOKENS=
 ```
 

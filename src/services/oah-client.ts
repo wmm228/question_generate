@@ -332,6 +332,7 @@ function isRetriableModelExecutionError(error: unknown): boolean {
     || text.includes("status=failed")
     || text.includes("status=timed_out")
     || text.includes("Run exceeded configured timeout")
+    || text.includes("completed without a displayable assistant message")
   );
 }
 
@@ -342,6 +343,10 @@ function isRateLimitedModelExecutionError(error: unknown): boolean {
 
 function formatAttemptedModels(models: string[]): string {
   return models.length > 0 ? models.join(", ") : "(workspace default)";
+}
+
+function isOpaqueOahWorkspaceName(value: string): boolean {
+  return /^ws_[a-f0-9]{16,}$/i.test(value.trim());
 }
 
 function scoreWorkspace(
@@ -358,17 +363,19 @@ function scoreWorkspace(
 
   const workspaceServiceName = (workspace.serviceName || "").trim().toLowerCase();
   const selectorServiceName = (selector.workspaceServiceName || "").trim().toLowerCase();
+  const workspaceName = (workspace.name || "").trim();
+  const selectorName = (selector.workspaceName || "").trim();
 
   if (selector.workspaceRuntime && workspace.runtime !== selector.workspaceRuntime) {
     return -1;
   }
-  if (selectorServiceName && workspaceServiceName !== selectorServiceName) {
+  if (selectorServiceName && workspaceServiceName && workspaceServiceName !== selectorServiceName) {
     return -1;
   }
-  if (selector.workspaceOwnerId && workspace.ownerId !== selector.workspaceOwnerId) {
+  if (selector.workspaceOwnerId && workspace.ownerId && workspace.ownerId !== selector.workspaceOwnerId) {
     return -1;
   }
-  if (selector.workspaceName && workspace.name !== selector.workspaceName) {
+  if (selectorName && workspaceName && workspaceName !== selectorName && !isOpaqueOahWorkspaceName(workspaceName)) {
     return -1;
   }
 
@@ -382,8 +389,10 @@ function scoreWorkspace(
   if (selector.workspaceOwnerId && workspace.ownerId === selector.workspaceOwnerId) {
     score += 70;
   }
-  if (selector.workspaceName && workspace.name === selector.workspaceName) {
+  if (selectorName && workspaceName === selectorName) {
     score += 60;
+  } else if (selectorName && isOpaqueOahWorkspaceName(workspaceName)) {
+    score += 5;
   }
 
   return score;
@@ -424,7 +433,28 @@ async function createWorkspace(options: OahSessionClientOptions): Promise<string
     options.requestTimeoutMs,
   );
 
-  return workspace.id;
+  const createdId = workspace.id;
+  const createdName = workspace.name;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await sleep(200 * (attempt + 1));
+    const page = await requestOahJson<OahWorkspacePage>(
+      options.baseUrl,
+      "/api/v1/workspaces?pageSize=200",
+      options.requestId,
+      { method: "GET" },
+      options.requestTimeoutMs,
+    );
+    const resolved = page.items.find((item) =>
+      item.id === createdId
+      || item.name === createdId
+      || (createdName && (item.id === createdName || item.name === createdName))
+    );
+    if (resolved?.id) {
+      return resolved.id;
+    }
+  }
+
+  return createdId;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

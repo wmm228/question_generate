@@ -7,6 +7,11 @@ const {
   executeAlgorithmStrategy,
 } = require("../src/services/ai-generate-runtime/strategies");
 const {
+  EVOQ_IRT_VIRTUAL_STUDENTS,
+  evaluateEvoqIrtDifficultyForDraft,
+  mapTutorDifficultyToEvoqDifficulty,
+} = require("../src/services/ai-generate-runtime/evoq-irt");
+const {
   buildPromptSpecJson,
   extractJsonObject,
   parseRawGeneratedPayload,
@@ -17,6 +22,7 @@ const {
 } = require("../src/services/question-agent-spec");
 
 const algorithms = ["direct", "cot", "react", "dear", "eqpr", "evoq"];
+const primaryOahModelRef = "platform/qwen_qwen3.5-397b-a17b";
 
 function applyBindings(template, bindings) {
   return Object.entries(bindings).reduce(
@@ -264,7 +270,78 @@ async function smokeAlgorithm(algorithm) {
   };
 }
 
+async function smokeEvoqIrtContract() {
+  assert(EVOQ_IRT_VIRTUAL_STUDENTS.length === 12, "evoq irt: should keep 12 virtual students");
+  const allowedNvidiaModelRefs = new Set([
+    "platform/deepseek-ai_deepseek-v4-flash",
+    "platform/qwen_qwen3.5-397b-a17b",
+    "platform/qwen_qwen3-next-80b-a3b-instruct",
+    "platform/mistralai_ministral-14b-instruct-2512",
+  ]);
+  for (const model of EVOQ_IRT_VIRTUAL_STUDENTS) {
+    assert(model.provider === "oah", `evoq irt: ${model.name} should use OAH`);
+    assert(model.api_type === "oah", `evoq irt: ${model.name} api_type should be OAH`);
+    assert(allowedNvidiaModelRefs.has(model.model), `evoq irt: ${model.name} should use a tested NVIDIA modelRef`);
+    assert(typeof model.original_model === "string" && model.original_model.includes("__"), `evoq irt: ${model.name} should preserve original model mapping`);
+    assert(typeof model.theta === "number" && Number.isFinite(model.theta), `evoq irt: ${model.name} should define theta`);
+  }
+  assert(mapTutorDifficultyToEvoqDifficulty(1) === 10, "evoq irt: difficulty 1 should map to 10");
+  assert(mapTutorDifficultyToEvoqDifficulty(2) === 30, "evoq irt: difficulty 2 should map to 30");
+  assert(mapTutorDifficultyToEvoqDifficulty(3) === 50, "evoq irt: difficulty 3 should map to 50");
+  assert(mapTutorDifficultyToEvoqDifficulty(4) === 60, "evoq irt: difficulty 4 should map to 60");
+  assert(mapTutorDifficultyToEvoqDifficulty(5) === 70, "evoq irt: difficulty 5 should map to 70");
+  assert(mapTutorDifficultyToEvoqDifficulty(6) === 80, "evoq irt: difficulty 6 should map to 80");
+
+  const payload = makePayload("evoq");
+  const specContext = normalizeQuestionGenerationSpec({
+    ...payload,
+    request_uuid: "smoke-evoq-irt",
+  });
+  const objective = await evaluateEvoqIrtDifficultyForDraft(
+    {
+      payload,
+      requestId: "smoke-evoq-irt",
+      specContext,
+    },
+    JSON.parse(makeDraft("evoq-irt-objective")),
+  );
+  assert(objective.method === "irt", "evoq irt: objective method should be irt");
+  assert(objective.virtual_student_count === 12, "evoq irt: objective should use 12 virtual students");
+  assert([10, 30, 50, 60, 70, 80].includes(objective.algorithm_difficulty_irt), "evoq irt: prediction should use EvoQ buckets");
+  assert(objective.external_difficulty_eval.includes("EvoQ"), "evoq irt: should produce external difficulty report");
+}
+
+function smokeOahDeploymentConfig() {
+  const runtimeSettingsPath = path.resolve(
+    process.cwd(),
+    "deploy/oah-deploy-root/source/runtimes/tutor-question-generation/.openharness/settings.yaml",
+  );
+  const dockerEnvPath = path.resolve(process.cwd(), ".env.docker");
+  const localEnvPath = path.resolve(process.cwd(), ".env");
+
+  const runtimeSettings = fs.readFileSync(runtimeSettingsPath, "utf8");
+  const dockerEnv = fs.readFileSync(dockerEnvPath, "utf8");
+  const localEnv = fs.readFileSync(localEnvPath, "utf8");
+
+  for (const forbidden of ["nvidia_nemotron", "nemotron-3-nano", "platform/kimi-", "platform/GLM-"]) {
+    assert(!runtimeSettings.includes(forbidden), `oah deployment settings must not contain old model marker: ${forbidden}`);
+  }
+
+  const modelRefs = [...runtimeSettings.matchAll(/ref:\s*(platform\/[^\s]+)/g)].map((match) => match[1]);
+  assert(modelRefs.length >= 5, "oah deployment settings should configure model refs for all runtime roles");
+  for (const modelRef of modelRefs) {
+    assert(modelRef === primaryOahModelRef, `oah deployment settings should use ${primaryOahModelRef}, got ${modelRef}`);
+  }
+
+  for (const [label, content] of [[".env", localEnv], [".env.docker", dockerEnv]]) {
+    assert(content.includes(`OAH_MODEL_NAME=${primaryOahModelRef}`), `${label} should pin OAH_MODEL_NAME to ${primaryOahModelRef}`);
+    assert(content.includes("OAH_REQUEST_TIMEOUT_MS=600000"), `${label} should use a 600s OAH request timeout`);
+  }
+}
+
 async function run() {
+  smokeOahDeploymentConfig();
+  await smokeEvoqIrtContract();
   const summaries = [];
   for (const algorithm of algorithms) {
     summaries.push(await smokeAlgorithm(algorithm));

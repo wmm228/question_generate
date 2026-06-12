@@ -15,6 +15,7 @@ import {
   type QuestionAgentDesign,
   type QuestionAgentPlan,
   type QuestionAgentRole,
+  type EvoqGenerationConfig,
   type QuestionGenerationContract,
   type QuestionGenerationSpec,
   type QuestionProfileNormalizeResponse,
@@ -30,6 +31,21 @@ import { getOahCoreConfig } from "./oah-config";
 
 const DEFAULT_TEACHER_ID = "default-teacher";
 const DEFAULT_STUDENT_ID = "default-student";
+const DEFAULT_EVOQ_CONFIG: EvoqGenerationConfig = {
+  population_size: 3,
+  generations: 3,
+  elite_ratio: 0.5,
+  lambda_ratio: 1.0,
+  selection_strategy: "tournament",
+  tournament_k: 2,
+  init_strategy: "auto",
+  fitness_diff_metric: "irt_strict",
+  early_stop_score: 95,
+  early_stop_requires_no_issues: true,
+  min_generations_before_early_stop: 1,
+  max_attempt_multiplier: 3,
+  seed_strategies: [],
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -40,6 +56,9 @@ function normalizeString(value: unknown): string {
 }
 
 function normalizeStringArray(value: unknown): string[] {
+  if (typeof value === "string") {
+    return Array.from(new Set(value.split(/[,，;；、\n]/).map((item) => item.trim()).filter(Boolean)));
+  }
   if (!Array.isArray(value)) {
     return [];
   }
@@ -55,10 +74,106 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function readNumberAlias(source: Record<string, unknown>, keys: string[], fallback: number): number {
+  for (const key of keys) {
+    const value = source[key];
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    const parsed = normalizeNumber(value, Number.NaN);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
+function readBooleanAlias(source: Record<string, unknown>, keys: string[], fallback: boolean): boolean {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+    const normalized = normalizeString(value).toLowerCase();
+    if (["true", "1", "yes", "y"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "n"].includes(normalized)) {
+      return false;
+    }
+  }
+  return fallback;
+}
+
+function readStringAlias(source: Record<string, unknown>, keys: string[], fallback: string): string {
+  for (const key of keys) {
+    const value = normalizeString(source[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
 function normalizeAlgorithmArray(value: unknown): AiGenAlgorithm[] {
   const allowed = new Set<string>(AI_GEN_ALGORITHMS);
   const algorithms = normalizeStringArray(value).filter((item): item is AiGenAlgorithm => allowed.has(item));
   return algorithms.length > 0 ? algorithms : ["direct", "cot", "evoq"];
+}
+
+function normalizeSelectionStrategy(value: string): EvoqGenerationConfig["selection_strategy"] {
+  return value === "roulette" || value === "random" || value === "tournament" ? value : "tournament";
+}
+
+function normalizeInitStrategy(value: string): EvoqGenerationConfig["init_strategy"] {
+  return value === "dataset" || value === "mixed" || value === "auto" ? value : "auto";
+}
+
+function normalizeFitnessDiffMetric(value: string): EvoqGenerationConfig["fitness_diff_metric"] {
+  return value === "irt_soft" || value === "rankllm_strict" || value === "rankllm_soft" || value === "irt_strict"
+    ? value
+    : "irt_strict";
+}
+
+function mergeRecordInputs(...values: unknown[]): Record<string, unknown> {
+  return Object.assign({}, ...values.filter(isRecord));
+}
+
+function normalizeEvoqGenerationConfig(input: QuestionSpecInput): EvoqGenerationConfig {
+  const config = mergeRecordInputs(input.ga, input.evoq, input.evoq_config);
+  return {
+    population_size: clampInteger(
+      readNumberAlias(config, ["population_size", "populationSize", "pop_size", "popSize", "max_population_size", "maxPopulationSize"], DEFAULT_EVOQ_CONFIG.population_size),
+      2,
+      20,
+    ),
+    generations: clampInteger(
+      readNumberAlias(config, ["generations", "mutation_rounds", "mutationRounds"], DEFAULT_EVOQ_CONFIG.generations),
+      0,
+      10,
+    ),
+    elite_ratio: clamp(readNumberAlias(config, ["elite_ratio", "eliteRatio"], DEFAULT_EVOQ_CONFIG.elite_ratio), 0, 1),
+    lambda_ratio: clamp(readNumberAlias(config, ["lambda_ratio", "lambdaRatio", "offspring_ratio", "offspringRatio"], DEFAULT_EVOQ_CONFIG.lambda_ratio), 0, 5),
+    selection_strategy: normalizeSelectionStrategy(readStringAlias(config, ["selection_strategy", "selectionStrategy"], DEFAULT_EVOQ_CONFIG.selection_strategy)),
+    tournament_k: clampInteger(readNumberAlias(config, ["tournament_k", "tournamentK"], DEFAULT_EVOQ_CONFIG.tournament_k), 1, 20),
+    init_strategy: normalizeInitStrategy(readStringAlias(config, ["init_strategy", "initStrategy"], DEFAULT_EVOQ_CONFIG.init_strategy)),
+    fitness_diff_metric: normalizeFitnessDiffMetric(readStringAlias(config, ["fitness_diff_metric", "fitnessDiffMetric"], DEFAULT_EVOQ_CONFIG.fitness_diff_metric)),
+    early_stop_score: clamp(readNumberAlias(config, ["early_stop_score", "earlyStopScore", "score_threshold", "scoreThreshold"], DEFAULT_EVOQ_CONFIG.early_stop_score), 0, 100),
+    early_stop_requires_no_issues: readBooleanAlias(config, ["early_stop_requires_no_issues", "earlyStopRequiresNoIssues"], DEFAULT_EVOQ_CONFIG.early_stop_requires_no_issues),
+    min_generations_before_early_stop: clampInteger(
+      readNumberAlias(config, ["min_generations_before_early_stop", "minGenerationsBeforeEarlyStop", "min_mutation_rounds", "minMutationRounds"], DEFAULT_EVOQ_CONFIG.min_generations_before_early_stop),
+      0,
+      10,
+    ),
+    max_attempt_multiplier: clampInteger(readNumberAlias(config, ["max_attempt_multiplier", "maxAttemptMultiplier"], DEFAULT_EVOQ_CONFIG.max_attempt_multiplier), 1, 10),
+    seed_strategies: normalizeStringArray(config.seed_strategies).length > 0
+      ? normalizeStringArray(config.seed_strategies)
+      : normalizeStringArray(config.seedStrategies),
+  };
 }
 
 function normalizeMasterySignals(value: unknown): StudentMasterySignal[] {
@@ -92,6 +207,8 @@ function hasExplicitConfirmation(input: QuestionSpecInput, payload: AiGenPayload
       return Boolean(normalizeString(input.subject));
     case "knowledge_point":
       return Boolean(normalizeString(input.knowledge_point));
+    case "knowledge_points":
+      return normalizeStringArray(input.knowledge_points).length > 0 || Boolean(normalizeString(input.knowledge_point));
     case "difficulty":
       return Boolean(normalizeString(input.difficulty));
     case "question_type":
@@ -100,10 +217,14 @@ function hasExplicitConfirmation(input: QuestionSpecInput, payload: AiGenPayload
       return Boolean(normalizeString(input.content_mode));
     case "algorithm":
       return Boolean(normalizeString(input.algorithm));
+    case "strategy":
+      return Boolean(normalizeString(input.strategy) || normalizeString(input.algorithm));
     case "image_requirement":
       return payload.content_mode !== "image"
         || payload.image_targets.length > 0
         || Boolean(normalizeString(input.image_placement));
+    case "diagram":
+      return payload.content_mode !== "image" || isRecord(input.diagram) || payload.image_targets.length > 0;
     default:
       return false;
   }
@@ -137,12 +258,34 @@ export function normalizeTeacherPreferenceProfile(value: unknown, now = new Date
 
 export function normalizeStudentProfile(value: unknown, now = new Date()): StudentProfile {
   const source = isRecord(value) ? value : {};
+  const irtSource = isRecord(source.irt) ? source.irt : {};
+  const abilityTheta = clamp(
+    readNumberAlias(
+      mergeRecordInputs(source, irtSource),
+      ["ability_theta", "theta"],
+      0,
+    ),
+    -4,
+    4,
+  );
+  const explicitDifficultyB = readNumberAlias(irtSource, ["difficulty_b", "b"], Number.NaN);
+  const commonErrors = normalizeStringArray(source.common_errors);
+  const misconceptions = Array.from(new Set([
+    ...normalizeStringArray(source.misconceptions),
+    ...commonErrors,
+  ]));
   return {
     student_id: normalizeString(source.student_id) || DEFAULT_STUDENT_ID,
-    ability_theta: clamp(normalizeNumber(source.ability_theta, 0), -4, 4),
+    ability_theta: abilityTheta,
     mastery: normalizeMasterySignals(source.mastery),
-    misconceptions: normalizeStringArray(source.misconceptions),
+    common_errors: commonErrors,
+    misconceptions,
     learning_preferences: normalizeStringArray(source.learning_preferences),
+    irt: {
+      theta: abilityTheta,
+      ability_theta: abilityTheta,
+      ...(Number.isFinite(explicitDifficultyB) ? { difficulty_b: clamp(explicitDifficultyB, -4, 4) } : {}),
+    },
     updated_at: normalizeString(source.updated_at) || now.toISOString(),
   };
 }
@@ -258,6 +401,7 @@ export function normalizeQuestionGenerationSpec(input: QuestionSpecInput): Quest
   const now = new Date();
   const teacherProfile = normalizeTeacherPreferenceProfile(input.teacher_profile, now);
   const studentProfile = normalizeStudentProfile(input.student_profile, now);
+  const evoqConfig = normalizeEvoqGenerationConfig(input);
   const validationErrors = [
     ...collectHumanControlledInputErrors(input, payload),
     ...(validationError ? [validationError] : []),
@@ -281,6 +425,7 @@ export function normalizeQuestionGenerationSpec(input: QuestionSpecInput): Quest
       renderer: payload.content_mode === "image" ? "safe_svg" : "none",
       must_be_answer_relevant: payload.content_mode === "image",
     },
+    evoq_config: evoqConfig,
     teacher_profile: teacherProfile,
     student_profile: studentProfile,
     human_controlled_rules: [...contract.human_controlled_rules],
@@ -300,9 +445,11 @@ export function buildQuestionAgentDesign(): QuestionAgentDesign {
   const contract = getQuestionAgentContract();
   return {
     architecture: {
+      runtime_id: contract.runtime_id,
       main_agent: contract.main_agent,
       subagents: [...contract.subagents],
       tools: [...contract.tools],
+      tool_service: contract.tool_service,
     },
     decision_rules: [...contract.decision_rules],
     recommended_oah: {

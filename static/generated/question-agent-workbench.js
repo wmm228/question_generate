@@ -2926,7 +2926,7 @@ class QuestionAgentWorkbenchApp {
         const format = formatRaw === "pdf" || formatRaw === "excel" ? formatRaw : "word";
         try {
             const blob = await this.store.downloadQuestionExport(requestId, format, portraitId);
-            const extension = format === "pdf" ? "pdf" : format === "excel" ? "xls" : "doc";
+            const extension = format === "pdf" ? "pdf" : format === "excel" ? "xls" : "docx";
             this.downloadBlob(blob, `${requestId || "question"}.${extension}`);
             this.setFeedback(this.portraitFeedback, `题目已导出 ${format === "excel" ? "Excel" : format.toUpperCase()}。`, "ok");
         }

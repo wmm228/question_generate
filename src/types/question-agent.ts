@@ -35,11 +35,14 @@ export const QUESTION_SPEC_STATUSES = ["draft", "ready", "blocked"] as const;
 export const QUESTION_CONTROLLED_FIELD_KEYS = [
   "subject",
   "knowledge_point",
+  "knowledge_points",
   "difficulty",
   "question_type",
   "content_mode",
   "algorithm",
+  "strategy",
   "image_requirement",
+  "diagram",
 ] as const;
 
 export type QuestionAgentRole = (typeof QUESTION_AGENT_ROLES)[number];
@@ -71,9 +74,31 @@ export interface StudentProfile {
   student_id: string;
   ability_theta: number;
   mastery: StudentMasterySignal[];
+  common_errors: string[];
   misconceptions: string[];
   learning_preferences: string[];
+  irt: {
+    theta: number;
+    ability_theta: number;
+    difficulty_b?: number;
+  };
   updated_at: string;
+}
+
+export interface EvoqGenerationConfig {
+  population_size: number;
+  generations: number;
+  elite_ratio: number;
+  lambda_ratio: number;
+  selection_strategy: "tournament" | "roulette" | "random";
+  tournament_k: number;
+  init_strategy: "auto" | "dataset" | "mixed";
+  fitness_diff_metric: "irt_strict" | "irt_soft" | "rankllm_strict" | "rankllm_soft";
+  early_stop_score: number;
+  early_stop_requires_no_issues: boolean;
+  min_generations_before_early_stop: number;
+  max_attempt_multiplier: number;
+  seed_strategies: string[];
 }
 
 export interface QuestionImageRequirement {
@@ -104,6 +129,7 @@ export interface QuestionGenerationSpec {
   content_mode: AiGenContentMode;
   algorithm: AiGenAlgorithm;
   image_requirement: QuestionImageRequirement;
+  evoq_config: EvoqGenerationConfig;
   teacher_profile: TeacherPreferenceProfile;
   student_profile: StudentProfile;
   human_controlled_rules: string[];
@@ -128,9 +154,11 @@ export interface QuestionAgentPlan {
 
 export interface QuestionAgentDesign {
   architecture: {
+    runtime_id: string;
     main_agent: QuestionAgentRole;
     subagents: QuestionAgentRole[];
     tools: QuestionToolName[];
+    tool_service: QuestionAgentToolService;
   };
   decision_rules: string[];
   recommended_oah: {
@@ -160,16 +188,32 @@ export interface QuestionAgentToolRouting {
   by_algorithm: Record<AiGenAlgorithm, QuestionToolName[]>;
 }
 
+export interface QuestionAgentToolService {
+  name: string;
+  base_url: string;
+  health: string;
+  openapi: string;
+  endpoints: Record<QuestionToolName, string>;
+  compatibility_generate: string;
+  generic_tool_dispatch: string;
+}
+
 export interface QuestionAgentFinalResponseContract {
+  version: string;
   required_fields: string[];
+  legacy_required_fields: string[];
+  item_required_fields: string[];
   image_additional_fields: string[];
   multiple_choice_option_count: number;
   multiple_choice_ground_truth_format: string;
-  true_false_ground_truth_values: string[];
+  single_choice_option_count: number | null;
+  single_choice_answer_format: string;
+  true_false_ground_truth_values: Array<string | boolean>;
 }
 
 export interface QuestionAgentContractDocument {
   spec_version: "edu-question-spec.v1";
+  runtime_id: string;
   main_agent: QuestionAgentRole;
   subagents: QuestionAgentRole[];
   tools: QuestionToolName[];
@@ -180,6 +224,7 @@ export interface QuestionAgentContractDocument {
   human_controlled_rules: string[];
   decision_rules: string[];
   validation_rules: string[];
+  tool_service: QuestionAgentToolService;
   tool_routing: QuestionAgentToolRouting;
   final_response_contract: QuestionAgentFinalResponseContract;
 }
@@ -195,6 +240,12 @@ export interface QuestionProfileNormalizeResponse<TProfile> {
 
 export type QuestionSpecInput = Partial<AiGenPayload> & {
   request_uuid?: unknown;
+  knowledge_points?: unknown;
+  strategy?: unknown;
+  diagram?: unknown;
+  evoq_config?: unknown;
+  evoq?: unknown;
+  ga?: unknown;
   teacher_profile?: unknown;
   student_profile?: unknown;
 };

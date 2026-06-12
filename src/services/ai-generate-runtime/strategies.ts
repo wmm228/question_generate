@@ -7,6 +7,10 @@ import {
   normalizeStringArray,
   type AiGenerateRuntime,
 } from "./runtime";
+import {
+  applyEvoqObjectiveDifficultyToReview,
+  evaluateEvoqIrtDifficultyForDraft,
+} from "./evoq-irt";
 import type {
   DraftArtifact,
   EvoqCandidateReview,
@@ -52,11 +56,22 @@ export interface RunEvoqPopulationOptions {
   seedStrategies?: string[];
   mutationRounds?: number;
   maxPopulationSize?: number;
+  eliteRatio?: number;
+  lambdaRatio?: number;
+  selectionStrategy?: "tournament" | "roulette" | "random";
+  tournamentK?: number;
+  earlyStopScore?: number;
+  earlyStopRequiresNoIssues?: boolean;
+  minGenerationsBeforeEarlyStop?: number;
+  maxAttemptMultiplier?: number;
 }
 
 export interface RunEvoqPopulationResult {
   candidates: EvoqPopulationCandidate[];
   best: EvoqPopulationCandidate;
+  config: Required<RunEvoqPopulationOptions>;
+  generationsExecuted: number;
+  offspringGenerated: number;
 }
 
 const DEAR_BRANCH_COUNT = 2;
@@ -68,11 +83,19 @@ const EQPR_MAX_DEPTH = 3;
 const EQPR_MIN_DEPTH = 2;
 const EQPR_W_EXP = 2.5;
 const EQPR_SIMULATE_EXPAND_WIDTH = 1;
-const EVOQ_DEFAULT_POPULATION_SIZE = 3;
-const EVOQ_DEFAULT_GENERATIONS = 3;
-const EVOQ_ELITE_RATIO = 0.5;
-const EVOQ_LAMBDA_RATIO = 1.0;
-const EVOQ_TOURNAMENT_K = 2;
+const EVOQ_DEFAULT_CONFIG: Required<RunEvoqPopulationOptions> = {
+  seedStrategies: [],
+  mutationRounds: 3,
+  maxPopulationSize: 3,
+  eliteRatio: 0.5,
+  lambdaRatio: 1.0,
+  selectionStrategy: "tournament",
+  tournamentK: 2,
+  earlyStopScore: 95,
+  earlyStopRequiresNoIssues: true,
+  minGenerationsBeforeEarlyStop: 1,
+  maxAttemptMultiplier: 3,
+};
 
 function readNumber(value: unknown, fallback: number): number {
   const parsed = typeof value === "number" ? value : Number.parseFloat(normalizeString(value));
@@ -464,9 +487,21 @@ async function scoreEqprThought(runtime: AiGenerateRuntime, thought: string, sta
   try {
     const parsed = runtime.parseJsonRecord(response, "EQPR 思路评分");
     return clampTenPointScore(readNumber(parsed.score, 5));
-  } catch {
-    return 5;
+  } catch (error) {
+    runtime.updateProgress({
+      stage: "evaluate",
+      state: "active",
+      detail: "EQPR 思路评分解析失败，已按低分处理该思路。",
+      log: error instanceof Error ? error.message : String(error),
+    });
+    return 1;
   }
+}
+
+function createEqprFallbackChild(node: EqprNode): EqprNode {
+  const fallback = createEqprNode(node.thought, node);
+  fallback.reward = 1;
+  return fallback;
 }
 
 async function expandEqprChildren(
@@ -497,15 +532,23 @@ async function expandEqprChildren(
         return childNode;
       });
     while (childNodes.length < expandWidth) {
-      const fallback = createEqprNode(node.thought, node);
-      fallback.reward = 5;
-      childNodes.push(fallback);
+      runtime.updateProgress({
+        stage: "evaluate",
+        state: "active",
+        detail: "EQPR 反思扩展数量不足，已补入低分兜底节点。",
+        log: `stage=${stageKey}, expected=${expandWidth}, actual=${childNodes.length}`,
+      });
+      childNodes.push(createEqprFallbackChild(node));
     }
     return childNodes.slice(0, expandWidth);
-  } catch {
-    const fallback = createEqprNode(node.thought, node);
-    fallback.reward = 5;
-    return [fallback];
+  } catch (error) {
+    runtime.updateProgress({
+      stage: "evaluate",
+      state: "active",
+      detail: "EQPR 反思扩展解析失败，已补入低分兜底节点。",
+      log: error instanceof Error ? error.message : String(error),
+    });
+    return [createEqprFallbackChild(node)];
   }
 }
 
@@ -662,19 +705,29 @@ function parseEvoqReview(runtime: AiGenerateRuntime, content: string): EvoqCandi
 
 async function reviewEvoqCandidate(
   runtime: AiGenerateRuntime,
-  draftJson: string,
+  draft: DraftArtifact,
   stageKey: string,
 ): Promise<EvoqCandidateReview> {
+  const objectiveDifficulty = await evaluateEvoqIrtDifficultyForDraft(runtime, draft.raw);
+  runtime.updateProgress({
+    stage: "evaluate",
+    state: objectiveDifficulty.is_diff_match ? "done" : "active",
+    detail: objectiveDifficulty.is_diff_match
+      ? "EvoQ IRT 客观难度已命中。"
+      : "EvoQ IRT 客观难度未命中，候选题需要变异调整。",
+    log: `target=${objectiveDifficulty.target_difficulty_irt}, predicted=${objectiveDifficulty.algorithm_difficulty_irt}, strict=${objectiveDifficulty.difficulty_strict_match_irt}, soft=${objectiveDifficulty.difficulty_soft_match_irt}`,
+  });
+
   const reviewContent = await runtime.callEvaluator(
     runtime.buildPrompt("algorithms/evoq-ranker.md", buildGeneratorBindings(runtime, {
-      draft_json: draftJson,
-      item_json: draftJson,
+      draft_json: draft.draftJson,
+      item_json: draft.draftJson,
       reference_items: "None provided.",
-      external_difficulty_eval: "Tutor 当前未接入 EvoQ 原仓库的 IRT/RankLLM 客观难度器；请按目标难度和题目本身严格评估。",
+      external_difficulty_eval: objectiveDifficulty.external_difficulty_eval,
     })),
     stageKey,
   );
-  return parseEvoqReview(runtime, reviewContent);
+  return applyEvoqObjectiveDifficultyToReview(parseEvoqReview(runtime, reviewContent), objectiveDifficulty);
 }
 
 async function buildEvoqCandidate(
@@ -684,7 +737,7 @@ async function buildEvoqCandidate(
   reviewStageKey: string,
 ): Promise<EvoqPopulationCandidate> {
   const draft = runtime.parseDraft(content);
-  const review = await reviewEvoqCandidate(runtime, draft.draftJson, reviewStageKey);
+  const review = await reviewEvoqCandidate(runtime, draft, reviewStageKey);
   return {
     id: `${idPrefix}-${randomUUID()}`,
     content,
@@ -694,28 +747,123 @@ async function buildEvoqCandidate(
   };
 }
 
-function tournamentSelect(candidates: EvoqPopulationCandidate[], k = EVOQ_TOURNAMENT_K): EvoqPopulationCandidate {
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function resolveEvoqPopulationConfig(runtime: AiGenerateRuntime): Required<RunEvoqPopulationOptions> {
+  const specConfig = runtime.specContext.spec.evoq_config;
+  return {
+    seedStrategies: specConfig.seed_strategies,
+    mutationRounds: clampInteger(specConfig.generations, 0, 10),
+    maxPopulationSize: clampInteger(specConfig.population_size, 2, 20),
+    eliteRatio: clampNumber(specConfig.elite_ratio, 0, 1),
+    lambdaRatio: clampNumber(specConfig.lambda_ratio, 0, 5),
+    selectionStrategy: specConfig.selection_strategy,
+    tournamentK: clampInteger(specConfig.tournament_k, 1, 20),
+    earlyStopScore: clampNumber(specConfig.early_stop_score, 0, 100),
+    earlyStopRequiresNoIssues: specConfig.early_stop_requires_no_issues,
+    minGenerationsBeforeEarlyStop: clampInteger(specConfig.min_generations_before_early_stop, 0, 10),
+    maxAttemptMultiplier: clampInteger(specConfig.max_attempt_multiplier, 1, 10),
+  };
+}
+
+function normalizeRunEvoqPopulationOptions(options: RunEvoqPopulationOptions): Required<RunEvoqPopulationOptions> {
+  return {
+    seedStrategies: options.seedStrategies && options.seedStrategies.length > 0 ? options.seedStrategies : EVOQ_DEFAULT_CONFIG.seedStrategies,
+    mutationRounds: clampInteger(options.mutationRounds ?? EVOQ_DEFAULT_CONFIG.mutationRounds, 0, 10),
+    maxPopulationSize: clampInteger(options.maxPopulationSize ?? EVOQ_DEFAULT_CONFIG.maxPopulationSize, 2, 20),
+    eliteRatio: clampNumber(options.eliteRatio ?? EVOQ_DEFAULT_CONFIG.eliteRatio, 0, 1),
+    lambdaRatio: clampNumber(options.lambdaRatio ?? EVOQ_DEFAULT_CONFIG.lambdaRatio, 0, 5),
+    selectionStrategy: options.selectionStrategy ?? EVOQ_DEFAULT_CONFIG.selectionStrategy,
+    tournamentK: clampInteger(options.tournamentK ?? EVOQ_DEFAULT_CONFIG.tournamentK, 1, 20),
+    earlyStopScore: clampNumber(options.earlyStopScore ?? EVOQ_DEFAULT_CONFIG.earlyStopScore, 0, 100),
+    earlyStopRequiresNoIssues: options.earlyStopRequiresNoIssues ?? EVOQ_DEFAULT_CONFIG.earlyStopRequiresNoIssues,
+    minGenerationsBeforeEarlyStop: clampInteger(options.minGenerationsBeforeEarlyStop ?? EVOQ_DEFAULT_CONFIG.minGenerationsBeforeEarlyStop, 0, 10),
+    maxAttemptMultiplier: clampInteger(options.maxAttemptMultiplier ?? EVOQ_DEFAULT_CONFIG.maxAttemptMultiplier, 1, 10),
+  };
+}
+
+function evoqFitnessWeight(candidate: EvoqPopulationCandidate): number {
+  return Math.max(1, candidate.review.fitness + candidate.review.score - candidate.review.issues.length * 5);
+}
+
+function rouletteSelect(candidates: EvoqPopulationCandidate[]): EvoqPopulationCandidate {
+  const total = candidates.reduce((sum, candidate) => sum + evoqFitnessWeight(candidate), 0);
+  let pick = Math.random() * Math.max(1, total);
+  for (const candidate of candidates) {
+    pick -= evoqFitnessWeight(candidate);
+    if (pick <= 0) {
+      return candidate;
+    }
+  }
+  return candidates[candidates.length - 1] || candidates.sort(compareCandidates)[0];
+}
+
+function tournamentSelect(candidates: EvoqPopulationCandidate[], k = EVOQ_DEFAULT_CONFIG.tournamentK): EvoqPopulationCandidate {
   const sampleSize = Math.min(k, candidates.length);
   const shuffled = [...candidates].sort(() => Math.random() - 0.5);
   const sampled = shuffled.slice(0, sampleSize);
   return sampled.sort(compareCandidates)[0] || candidates.sort(compareCandidates)[0];
 }
 
-function isEvoqEarlyStopCandidate(candidate: EvoqPopulationCandidate): boolean {
-  return candidate.review.passed && candidate.review.fitness >= 90 && candidate.review.issues.length === 0;
+function selectEvoqParent(candidates: EvoqPopulationCandidate[], config: Required<RunEvoqPopulationOptions>): EvoqPopulationCandidate {
+  if (config.selectionStrategy === "random") {
+    return candidates[Math.floor(Math.random() * candidates.length)] || candidates.sort(compareCandidates)[0];
+  }
+  if (config.selectionStrategy === "roulette") {
+    return rouletteSelect(candidates);
+  }
+  return tournamentSelect(candidates, config.tournamentK);
+}
+
+function selectEvoqParentPair(
+  population: EvoqPopulationCandidate[],
+  elites: EvoqPopulationCandidate[],
+  config: Required<RunEvoqPopulationOptions>,
+): [EvoqPopulationCandidate, EvoqPopulationCandidate] {
+  const parentA = selectEvoqParent(population, config);
+  const elitePool = elites.filter((candidate) => candidate.id !== parentA.id);
+  const fallbackPool = population.filter((candidate) => candidate.id !== parentA.id);
+  const parentB = selectEvoqParent(
+    elitePool.length > 0 ? elitePool : fallbackPool.length > 0 ? fallbackPool : elites.length > 0 ? elites : population,
+    config,
+  );
+  return [parentA, parentB || parentA];
+}
+
+function isEvoqEarlyStopCandidate(
+  candidate: EvoqPopulationCandidate,
+  generationsExecuted: number,
+  config: Required<RunEvoqPopulationOptions>,
+): boolean {
+  if (generationsExecuted < config.minGenerationsBeforeEarlyStop) {
+    return false;
+  }
+  if (!candidate.review.passed || candidate.review.fitness < config.earlyStopScore) {
+    return false;
+  }
+  return !config.earlyStopRequiresNoIssues || candidate.review.issues.length === 0;
 }
 
 export async function runEvoqPopulation(
   runtime: AiGenerateRuntime,
   options: RunEvoqPopulationOptions = {},
 ): Promise<RunEvoqPopulationResult> {
-  const populationSize = Math.max(2, options.maxPopulationSize ?? EVOQ_DEFAULT_POPULATION_SIZE);
-  const generations = Math.max(1, options.mutationRounds ?? EVOQ_DEFAULT_GENERATIONS);
-  const seedStrategies = options.seedStrategies && options.seedStrategies.length > 0
-    ? options.seedStrategies
+  const config = normalizeRunEvoqPopulationOptions(options);
+  const populationSize = config.maxPopulationSize;
+  const generations = config.mutationRounds;
+  const seedStrategies = config.seedStrategies.length > 0
+    ? config.seedStrategies
     : Array.from({ length: populationSize }, (_, index) => `生成第 ${index + 1} 个风格不同、答案唯一的初始种子。`);
 
   let population: EvoqPopulationCandidate[] = [];
+  let generationsExecuted = 0;
+  let offspringGenerated = 0;
 
   for (let index = 0; index < populationSize; index += 1) {
     const seedStrategy = seedStrategies[index % seedStrategies.length] || "";
@@ -736,23 +884,25 @@ export async function runEvoqPopulation(
   }
 
   population = population.sort(compareCandidates).slice(0, populationSize);
-  if (population[0] && isEvoqEarlyStopCandidate(population[0])) {
-    return { candidates: population, best: population[0] };
+  if (population[0] && isEvoqEarlyStopCandidate(population[0], generationsExecuted, config)) {
+    return { candidates: population, best: population[0], config, generationsExecuted, offspringGenerated };
   }
 
   for (let generation = 0; generation < generations; generation += 1) {
     const sortedPopulation = population.sort(compareCandidates);
-    const eliteCount = Math.max(1, Math.floor(populationSize * EVOQ_ELITE_RATIO));
+    const eliteCount = Math.max(1, Math.floor(populationSize * config.eliteRatio));
     const elites = sortedPopulation.slice(0, eliteCount);
-    const offspringTarget = Math.max(1, Math.floor(populationSize * EVOQ_LAMBDA_RATIO));
+    const offspringTarget = Math.floor(populationSize * config.lambdaRatio);
+    if (offspringTarget <= 0) {
+      break;
+    }
     const offspring: EvoqPopulationCandidate[] = [];
     let attempts = 0;
-    const maxAttempts = offspringTarget * 3;
+    const maxAttempts = offspringTarget * config.maxAttemptMultiplier;
 
     while (offspring.length < offspringTarget && attempts < maxAttempts) {
       attempts += 1;
-      const parentA = tournamentSelect(population);
-      const parentB = tournamentSelect(elites);
+      const [parentA, parentB] = selectEvoqParentPair(population, elites, config);
 
       runtime.updateProgress({
         stage: "generate",
@@ -795,10 +945,15 @@ export async function runEvoqPopulation(
         `evoq-rank-mutant-${generation + 1}-${attempts}`,
       );
       offspring.push(mutant);
+      offspringGenerated += 1;
     }
 
+    if (offspring.length === 0) {
+      break;
+    }
+    generationsExecuted += 1;
     population = [...population, ...offspring].sort(compareCandidates).slice(0, populationSize);
-    if (population[0] && isEvoqEarlyStopCandidate(population[0])) {
+    if (population[0] && isEvoqEarlyStopCandidate(population[0], generationsExecuted, config)) {
       break;
     }
   }
@@ -812,11 +967,14 @@ export async function runEvoqPopulation(
   return {
     candidates: ranked,
     best,
+    config,
+    generationsExecuted,
+    offspringGenerated,
   };
 }
 
 async function executeEvoqStrategy(runtime: AiGenerateRuntime): Promise<NormalizedRawGeneratedPayload> {
-  const population = await runEvoqPopulation(runtime);
+  const population = await runEvoqPopulation(runtime, resolveEvoqPopulationConfig(runtime));
   let draft: DraftArtifact = {
     content: population.best.content,
     draftJson: population.best.draftJson,

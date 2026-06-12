@@ -330,6 +330,16 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function buildPortraitExportLines(portrait: QuestionPortraitDocument): string[] {
   const lines = [
     `试题描述规范：${portrait.title}`,
@@ -479,6 +489,22 @@ interface PdfImageData {
   colorSpace: "/DeviceRGB";
   filter: "/FlateDecode" | "/DCTDecode";
   data: Buffer;
+}
+
+interface DocxImageData {
+  relId: string;
+  fileName: string;
+  contentType: string;
+  data: Buffer;
+  label: string;
+  width: number;
+  height: number;
+}
+
+interface ZipEntry {
+  name: string;
+  data: Buffer;
+  compress?: boolean;
 }
 
 const GENERATED_VISUALS_ROUTE_PREFIX = "/output/ai-generated-visuals/";
@@ -722,17 +748,6 @@ function collectEmbeddedQuestionImages(
   return images.filter((image): image is EmbeddedQuestionImage => Boolean(image.dataUri));
 }
 
-function buildQuestionWordExport(result: AiGenerateApiResponse, images: EmbeddedQuestionImage[]): Buffer {
-  const paragraphs = buildQuestionExportLines(result)
-    .map((line) => line ? `<p>${escapeHtml(line)}</p>` : "<p>&nbsp;</p>")
-    .join("\n");
-  const imageMarkup = images.map((image) => `
-    <p><strong>${escapeHtml(image.label)}</strong></p>
-    <p><img src="${image.dataUri}" style="max-width:560px;height:auto"></p>
-  `).join("\n");
-  return Buffer.from(`<!doctype html><html><head><meta charset="utf-8"><title>棰樼洰瀵煎嚭</title></head><body>${paragraphs}${imageMarkup}</body></html>`, "utf-8");
-}
-
 function buildQuestionExcelExport(result: AiGenerateApiResponse, images: EmbeddedQuestionImage[]): Buffer {
   const rows = buildQuestionExportLines(result)
     .map((line, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(line)}</td></tr>`)
@@ -871,6 +886,387 @@ function parsePdfImage(dataUri: string): PdfImageData | null {
   return null;
 }
 
+let crc32Table: number[] | null = null;
+
+function getCrc32Table(): number[] {
+  if (crc32Table) {
+    return crc32Table;
+  }
+  crc32Table = Array.from({ length: 256 }, (_, index) => {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value & 1) ? (0xEDB88320 ^ (value >>> 1)) : (value >>> 1);
+    }
+    return value >>> 0;
+  });
+  return crc32Table;
+}
+
+function crc32(data: Buffer): number {
+  const table = getCrc32Table();
+  let crc = 0xFFFFFFFF;
+  for (const byte of data) {
+    crc = table[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function getZipDosTime(date: Date): { dosDate: number; dosTime: number } {
+  const year = Math.max(1980, date.getFullYear());
+  return {
+    dosDate: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+    dosTime: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+  };
+}
+
+function buildZip(entries: ZipEntry[]): Buffer {
+  const fileChunks: Buffer[] = [];
+  const centralDirectoryChunks: Buffer[] = [];
+  let offset = 0;
+  const { dosDate, dosTime } = getZipDosTime(new Date());
+
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, "utf8");
+    const data = entry.data;
+    const compressed = entry.compress === false ? data : zlib.deflateRawSync(data);
+    const compressionMethod = entry.compress === false ? 0 : 8;
+    const checksum = crc32(data);
+    const localHeaderOffset = offset;
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034B50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(compressionMethod, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(checksum, 14);
+    localHeader.writeUInt32LE(compressed.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+
+    fileChunks.push(localHeader, name, compressed);
+    offset += localHeader.length + name.length + compressed.length;
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014B50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(compressionMethod, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    centralHeader.writeUInt32LE(checksum, 16);
+    centralHeader.writeUInt32LE(compressed.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(localHeaderOffset, 42);
+    centralDirectoryChunks.push(centralHeader, name);
+  }
+
+  const centralDirectory = Buffer.concat(centralDirectoryChunks);
+  const endOfCentralDirectory = Buffer.alloc(22);
+  endOfCentralDirectory.writeUInt32LE(0x06054B50, 0);
+  endOfCentralDirectory.writeUInt16LE(0, 4);
+  endOfCentralDirectory.writeUInt16LE(0, 6);
+  endOfCentralDirectory.writeUInt16LE(entries.length, 8);
+  endOfCentralDirectory.writeUInt16LE(entries.length, 10);
+  endOfCentralDirectory.writeUInt32LE(centralDirectory.length, 12);
+  endOfCentralDirectory.writeUInt32LE(offset, 16);
+  endOfCentralDirectory.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...fileChunks, centralDirectory, endOfCentralDirectory]);
+}
+
+function normalizeDocxImageContentType(mime: string): string {
+  const normalized = mime.toLowerCase();
+  if (normalized === "image/jpg") {
+    return "image/jpeg";
+  }
+  return normalized;
+}
+
+function docxImageExtension(contentType: string): string {
+  if (contentType === "image/jpeg") {
+    return "jpg";
+  }
+  if (contentType === "image/gif") {
+    return "gif";
+  }
+  if (contentType === "image/webp") {
+    return "webp";
+  }
+  if (contentType === "image/svg+xml") {
+    return "svg";
+  }
+  return "png";
+}
+
+function readPngDimensions(data: Buffer): { width: number; height: number } | null {
+  if (data.length < 24 || data.toString("ascii", 1, 4) !== "PNG") {
+    return null;
+  }
+  return {
+    width: data.readUInt32BE(16),
+    height: data.readUInt32BE(20),
+  };
+}
+
+function readGifDimensions(data: Buffer): { width: number; height: number } | null {
+  if (data.length < 10 || (data.toString("ascii", 0, 6) !== "GIF87a" && data.toString("ascii", 0, 6) !== "GIF89a")) {
+    return null;
+  }
+  return {
+    width: data.readUInt16LE(6),
+    height: data.readUInt16LE(8),
+  };
+}
+
+function readWebpDimensions(data: Buffer): { width: number; height: number } | null {
+  if (data.length < 30 || data.toString("ascii", 0, 4) !== "RIFF" || data.toString("ascii", 8, 12) !== "WEBP") {
+    return null;
+  }
+  const format = data.toString("ascii", 12, 16);
+  if (format === "VP8X") {
+    return {
+      width: data.readUIntLE(24, 3) + 1,
+      height: data.readUIntLE(27, 3) + 1,
+    };
+  }
+  if (format === "VP8 ") {
+    return {
+      width: data.readUInt16LE(26) & 0x3FFF,
+      height: data.readUInt16LE(28) & 0x3FFF,
+    };
+  }
+  if (format === "VP8L" && data.length >= 25) {
+    const bits = data.readUInt32LE(21);
+    return {
+      width: (bits & 0x3FFF) + 1,
+      height: ((bits >> 14) & 0x3FFF) + 1,
+    };
+  }
+  return null;
+}
+
+function readSvgDimensions(data: Buffer): { width: number; height: number } | null {
+  const svg = data.toString("utf8", 0, Math.min(data.length, 4096));
+  const width = Number.parseFloat(svg.match(/\bwidth=["']([0-9.]+)/i)?.[1] || "");
+  const height = Number.parseFloat(svg.match(/\bheight=["']([0-9.]+)/i)?.[1] || "");
+  if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    return { width, height };
+  }
+  const viewBox = svg.match(/\bviewBox=["']\s*[-0-9.]+\s+[-0-9.]+\s+([0-9.]+)\s+([0-9.]+)/i);
+  const viewBoxWidth = Number.parseFloat(viewBox?.[1] || "");
+  const viewBoxHeight = Number.parseFloat(viewBox?.[2] || "");
+  if (Number.isFinite(viewBoxWidth) && Number.isFinite(viewBoxHeight) && viewBoxWidth > 0 && viewBoxHeight > 0) {
+    return { width: viewBoxWidth, height: viewBoxHeight };
+  }
+  return null;
+}
+
+function readDocxImageDimensions(contentType: string, data: Buffer): { width: number; height: number } {
+  const dimensions = contentType === "image/png"
+    ? readPngDimensions(data)
+    : contentType === "image/jpeg"
+      ? parseJpegDimensions(data)
+      : contentType === "image/gif"
+        ? readGifDimensions(data)
+        : contentType === "image/webp"
+          ? readWebpDimensions(data)
+          : contentType === "image/svg+xml"
+            ? readSvgDimensions(data)
+            : null;
+  return dimensions || { width: 640, height: 360 };
+}
+
+function buildDocxImages(images: EmbeddedQuestionImage[]): DocxImageData[] {
+  const docxImages: DocxImageData[] = [];
+  images.forEach((image) => {
+    const decoded = decodeDataUri(image.dataUri);
+    if (!decoded) {
+      return;
+    }
+    const contentType = normalizeDocxImageContentType(decoded.mime);
+    const extension = docxImageExtension(contentType);
+    const dimensions = readDocxImageDimensions(contentType, decoded.data);
+    const index = docxImages.length + 1;
+    docxImages.push({
+      relId: `rId${index}`,
+      fileName: `image${index}.${extension}`,
+      contentType,
+      data: decoded.data,
+      label: image.label,
+      width: dimensions.width,
+      height: dimensions.height,
+    });
+  });
+  return docxImages;
+}
+
+function docxParagraph(value: string): string {
+  if (!value) {
+    return "<w:p/>";
+  }
+  return `<w:p><w:r><w:t xml:space="preserve">${escapeXml(value)}</w:t></w:r></w:p>`;
+}
+
+function docxImageSize(width: number, height: number): { cx: number; cy: number } {
+  const emuPerPixel = 9525;
+  const sourceWidth = Math.max(1, width);
+  const sourceHeight = Math.max(1, height);
+  const rawCx = sourceWidth * emuPerPixel;
+  const rawCy = sourceHeight * emuPerPixel;
+  const maxCx = 5_700_000;
+  const maxCy = 5_900_000;
+  const scale = Math.min(maxCx / rawCx, maxCy / rawCy, 1);
+  return {
+    cx: Math.max(1, Math.floor(rawCx * scale)),
+    cy: Math.max(1, Math.floor(rawCy * scale)),
+  };
+}
+
+function docxImageParagraph(image: DocxImageData, index: number): string {
+  const { cx, cy } = docxImageSize(image.width, image.height);
+  const docPrId = index + 1;
+  return `
+<w:p>
+  <w:r>
+    <w:drawing>
+      <wp:inline distT="0" distB="0" distL="0" distR="0">
+        <wp:extent cx="${cx}" cy="${cy}"/>
+        <wp:effectExtent l="0" t="0" r="0" b="0"/>
+        <wp:docPr id="${docPrId}" name="${escapeXml(image.fileName)}" descr="${escapeXml(image.label)}"/>
+        <wp:cNvGraphicFramePr>
+          <a:graphicFrameLocks noChangeAspect="1"/>
+        </wp:cNvGraphicFramePr>
+        <a:graphic>
+          <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+            <pic:pic>
+              <pic:nvPicPr>
+                <pic:cNvPr id="${docPrId}" name="${escapeXml(image.fileName)}"/>
+                <pic:cNvPicPr/>
+              </pic:nvPicPr>
+              <pic:blipFill>
+                <a:blip r:embed="${escapeXml(image.relId)}"/>
+                <a:stretch><a:fillRect/></a:stretch>
+              </pic:blipFill>
+              <pic:spPr>
+                <a:xfrm>
+                  <a:off x="0" y="0"/>
+                  <a:ext cx="${cx}" cy="${cy}"/>
+                </a:xfrm>
+                <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+              </pic:spPr>
+            </pic:pic>
+          </a:graphicData>
+        </a:graphic>
+      </wp:inline>
+    </w:drawing>
+  </w:r>
+</w:p>`;
+}
+
+function docxXmlEntry(name: string, xml: string): ZipEntry {
+  return {
+    name,
+    data: Buffer.from(xml, "utf8"),
+  };
+}
+
+function buildDocxContentTypes(images: DocxImageData[]): string {
+  const imageDefaults = new Map<string, string>();
+  images.forEach((image) => {
+    imageDefaults.set(docxImageExtension(image.contentType), image.contentType);
+  });
+  const imageDefaultXml = Array.from(imageDefaults.entries())
+    .map(([extension, contentType]) => `<Default Extension="${escapeXml(extension)}" ContentType="${escapeXml(contentType)}"/>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  ${imageDefaultXml}
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`;
+}
+
+function buildQuestionDocxExport(result: AiGenerateApiResponse, images: EmbeddedQuestionImage[]): Buffer {
+  const docxImages = buildDocxImages(images);
+  const textParagraphs = buildQuestionExportLines(result)
+    .flatMap((line) => line.split(/\r?\n/))
+    .map((line) => docxParagraph(line))
+    .join("\n");
+  const imageParagraphs = docxImages
+    .map((image, index) => `${docxParagraph(image.label)}${docxImageParagraph(image, index)}`)
+    .join("\n");
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>
+    ${textParagraphs}
+    ${imageParagraphs}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+  const relationshipsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`;
+  const documentRelationshipsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${docxImages.map((image) => `<Relationship Id="${escapeXml(image.relId)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${escapeXml(image.fileName)}"/>`).join("\n  ")}
+</Relationships>`;
+  const now = new Date().toISOString();
+  const coreXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties
+  xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:dcterms="http://purl.org/dc/terms/"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Question Export</dc:title>
+  <dc:creator>Tutor</dc:creator>
+  <cp:lastModifiedBy>Tutor</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`;
+  const appXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+  xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Tutor</Application>
+</Properties>`;
+  return buildZip([
+    docxXmlEntry("[Content_Types].xml", buildDocxContentTypes(docxImages)),
+    docxXmlEntry("_rels/.rels", relationshipsXml),
+    docxXmlEntry("docProps/core.xml", coreXml),
+    docxXmlEntry("docProps/app.xml", appXml),
+    docxXmlEntry("word/document.xml", documentXml),
+    docxXmlEntry("word/_rels/document.xml.rels", documentRelationshipsXml),
+    ...docxImages.map((image): ZipEntry => ({
+      name: `word/media/${image.fileName}`,
+      data: image.data,
+      compress: false,
+    })),
+  ]);
+}
+
 function buildQuestionPdfExport(result: AiGenerateApiResponse, images: EmbeddedQuestionImage[]): Buffer {
   const lines = buildQuestionExportLines(result).flatMap((line) => wrapPdfLine(line));
   const objects: Buffer[] = [];
@@ -967,17 +1363,17 @@ function sendQuestionExport(
   deps: Pick<QuestionAgentRouterDependencies, "staticDirectory" | "appRoot" | "workspaceRoot">,
 ): void {
   const images = collectEmbeddedQuestionImages(result, deps);
-  const extension = format === "pdf" ? "pdf" : format === "excel" ? "xls" : "doc";
+  const extension = format === "pdf" ? "pdf" : format === "excel" ? "xls" : "docx";
   const contentType = format === "pdf"
     ? "application/pdf"
     : format === "excel"
       ? "application/vnd.ms-excel; charset=utf-8"
-      : "application/msword; charset=utf-8";
+      : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const buffer = format === "pdf"
     ? buildQuestionPdfExport(result, images)
     : format === "excel"
       ? buildQuestionExcelExport(result, images)
-      : buildQuestionWordExport(result, images);
+      : buildQuestionDocxExport(result, images);
   res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Disposition", `attachment; filename="${requestId || "question"}.${extension}"`);
   res.send(buffer);
@@ -1304,18 +1700,18 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
         validation_errors: result.spec.validation_errors,
         guidance: {
           status_explanation: ready
-            ? "Spec submitted and marked ready."
-            : "Spec submitted but still has validation errors.",
+            ? "出题规格已提交并标记为可生成。"
+            : "出题规格已提交，但仍存在校验错误。",
           missing_items: result.spec.validation_errors,
           teacher_checklist: [
-            payload.subject ? `subject confirmed: ${payload.subject}` : "",
-            payload.knowledge_point ? `knowledge_point confirmed: ${payload.knowledge_point}` : "",
-            payload.difficulty ? `difficulty confirmed: ${payload.difficulty}` : "",
-            payload.question_type ? `question_type confirmed: ${payload.question_type}` : "",
-            payload.content_mode ? `content_mode confirmed: ${payload.content_mode}` : "",
-            payload.algorithm ? `algorithm confirmed: ${payload.algorithm}` : "",
+            payload.subject ? `已确认学科：${payload.subject}` : "",
+            payload.knowledge_point ? `已确认知识点：${payload.knowledge_point}` : "",
+            payload.difficulty ? `已确认难度：${payload.difficulty}` : "",
+            payload.question_type ? `已确认题型：${payload.question_type}` : "",
+            payload.content_mode ? `已确认内容模式：${payload.content_mode}` : "",
+            payload.algorithm ? `已确认算法：${payload.algorithm}` : "",
           ].filter(Boolean),
-          next_step: ready ? "Generate question." : "Fix validation errors and submit again.",
+          next_step: ready ? "可以生成题目。" : "请修正校验错误后重新提交。",
         },
         updated_at: now,
       });

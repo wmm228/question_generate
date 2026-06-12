@@ -3,7 +3,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 
 const DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1";
-const DEFAULT_MODEL = "nvidia/nemotron-3-nano-30b-a3b";
+const DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b";
 
 for (const envFile of [".env.nvidia.local", ".env.nvidia", ".env.local"]) {
   const envPath = path.resolve(process.cwd(), envFile);

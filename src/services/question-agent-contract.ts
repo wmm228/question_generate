@@ -11,12 +11,13 @@ import {
   type QuestionAgentContractDocument,
   type QuestionAgentFinalResponseContract,
   type QuestionAgentRole,
+  type QuestionAgentToolService,
   type QuestionAgentToolRouting,
   type QuestionControlledFieldKey,
   type QuestionToolName,
 } from "../types/question-agent";
 
-const CONTRACT_HEADING = "## Machine-Readable Contract";
+const CONTRACT_HEADINGS = ["## 机器可读合同", "## Machine-Readable Contract"];
 
 const ROLE_SET = new Set<string>(QUESTION_AGENT_ROLES);
 const TOOL_SET = new Set<string>(QUESTION_TOOL_NAMES);
@@ -47,6 +48,57 @@ function normalizeStringArray(value: unknown, label: string): string[] {
   return values;
 }
 
+function normalizeOptionalStringArray(value: unknown, label: string): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  return normalizeStringArray(value, label);
+}
+
+function normalizeStringOrBooleanArray(value: unknown, label: string): Array<string | boolean> {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be a string or boolean array`);
+  }
+  return value.map((item) => {
+    if (typeof item === "boolean") {
+      return item;
+    }
+    const normalized = normalizeString(item);
+    if (!normalized) {
+      throw new Error(`${label} contains an invalid item`);
+    }
+    return normalized;
+  });
+}
+
+function parsePositiveIntegerOrNull(value: unknown, label: string): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const parsed = typeof value === "number" ? value : Number.parseInt(normalizeString(value), 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive number`);
+  }
+  return parsed;
+}
+
+function assertExactMembers(actual: readonly string[], expected: readonly string[], label: string): void {
+  const duplicateMembers = actual.filter((item, index) => actual.indexOf(item) !== index);
+  if (duplicateMembers.length > 0) {
+    throw new Error(`${label} contains duplicate entries: ${Array.from(new Set(duplicateMembers)).join(", ")}`);
+  }
+
+  const missingMembers = expected.filter((item) => !actual.includes(item));
+  const extraMembers = actual.filter((item) => !expected.includes(item));
+  if (missingMembers.length > 0 || extraMembers.length > 0) {
+    const details = [
+      missingMembers.length > 0 ? `missing: ${missingMembers.join(", ")}` : "",
+      extraMembers.length > 0 ? `extra: ${extraMembers.join(", ")}` : "",
+    ].filter(Boolean).join("; ");
+    throw new Error(`${label} must exactly match the migrated question agent contract (${details})`);
+  }
+}
+
 function findContractPath(): string {
   const candidatePaths = [
     path.resolve(process.cwd(), "oah-runtimes/tutor-question-generation/AGENTS.md"),
@@ -55,18 +107,20 @@ function findContractPath(): string {
   ];
   const foundPath = candidatePaths.find((candidatePath) => fs.existsSync(candidatePath));
   if (!foundPath) {
-    throw new Error("Question agent contract source file not found");
+    throw new Error("未找到题目生成智能体合同源文件");
   }
   return foundPath;
 }
 
 function extractContractJson(markdown: string): string {
-  const escapedHeading = CONTRACT_HEADING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = markdown.match(new RegExp(`${escapedHeading}\\s*\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\``, "i"));
-  if (!match?.[1]) {
-    throw new Error("Machine-readable question agent contract block not found");
+  for (const heading of CONTRACT_HEADINGS) {
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = markdown.match(new RegExp(`${escapedHeading}\\s*\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\``, "i"));
+    if (match?.[1]) {
+      return match[1].trim();
+    }
   }
-  return match[1].trim();
+  throw new Error("未找到题目生成智能体的机器可读合同 JSON 块");
 }
 
 function parseQuestionAgentRole(value: unknown, label: string): QuestionAgentRole {
@@ -151,6 +205,41 @@ function parseToolRouting(value: unknown): QuestionAgentToolRouting {
   };
 }
 
+function parseToolService(value: unknown): QuestionAgentToolService {
+  if (!isRecord(value)) {
+    throw new Error("tool_service must be an object");
+  }
+
+  const endpoints = {} as Record<QuestionToolName, string>;
+  for (const tool of QUESTION_TOOL_NAMES) {
+    const endpoint = normalizeString(value[tool]);
+    if (!endpoint) {
+      throw new Error(`tool_service missing endpoint for ${tool}`);
+    }
+    endpoints[tool] = endpoint;
+  }
+
+  const name = normalizeString(value.name);
+  const baseUrl = normalizeString(value.base_url);
+  const health = normalizeString(value.health);
+  const openapi = normalizeString(value.openapi);
+  const compatibilityGenerate = normalizeString(value.compatibility_generate);
+  const genericToolDispatch = normalizeString(value.generic_tool_dispatch);
+  if (!name || !baseUrl || !health || !openapi || !compatibilityGenerate || !genericToolDispatch) {
+    throw new Error("tool_service requires name, base_url, health, openapi, compatibility_generate, and generic_tool_dispatch");
+  }
+
+  return {
+    name,
+    base_url: baseUrl,
+    health,
+    openapi,
+    endpoints,
+    compatibility_generate: compatibilityGenerate,
+    generic_tool_dispatch: genericToolDispatch,
+  };
+}
+
 function parseConfirmationRequirement(value: unknown, label: string): QuestionAgentConfirmationRequirement {
   if (!isRecord(value)) {
     throw new Error(`${label} must be an object`);
@@ -179,10 +268,11 @@ function parseFinalResponseContract(value: unknown): QuestionAgentFinalResponseC
     throw new Error("final_response_contract must be an object");
   }
 
-  const optionCount = typeof value.multiple_choice_option_count === "number"
-    ? value.multiple_choice_option_count
-    : Number.parseInt(normalizeString(value.multiple_choice_option_count), 10);
-  if (!Number.isFinite(optionCount) || optionCount <= 0) {
+  const optionCount = parsePositiveIntegerOrNull(
+    value.multiple_choice_option_count,
+    "final_response_contract.multiple_choice_option_count",
+  );
+  if (optionCount === null) {
     throw new Error("final_response_contract.multiple_choice_option_count must be a positive number");
   }
 
@@ -192,14 +282,28 @@ function parseFinalResponseContract(value: unknown): QuestionAgentFinalResponseC
   }
 
   return {
+    version: normalizeString(value.version),
     required_fields: normalizeStringArray(value.required_fields, "final_response_contract.required_fields"),
+    legacy_required_fields: normalizeOptionalStringArray(
+      value.legacy_required_fields,
+      "final_response_contract.legacy_required_fields",
+    ),
+    item_required_fields: normalizeOptionalStringArray(
+      value.item_required_fields,
+      "final_response_contract.item_required_fields",
+    ),
     image_additional_fields: normalizeStringArray(
       value.image_additional_fields,
       "final_response_contract.image_additional_fields",
     ),
     multiple_choice_option_count: optionCount,
     multiple_choice_ground_truth_format: multipleChoiceGroundTruthFormat,
-    true_false_ground_truth_values: normalizeStringArray(
+    single_choice_option_count: parsePositiveIntegerOrNull(
+      value.single_choice_option_count,
+      "final_response_contract.single_choice_option_count",
+    ),
+    single_choice_answer_format: normalizeString(value.single_choice_answer_format),
+    true_false_ground_truth_values: normalizeStringOrBooleanArray(
       value.true_false_ground_truth_values,
       "final_response_contract.true_false_ground_truth_values",
     ),
@@ -220,11 +324,22 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     throw new Error("explicit_confirmation_requirements must be an array");
   }
 
+  const mainAgent = parseQuestionAgentRole(value.main_agent, "main_agent");
+  const subagents = parseQuestionAgentRoleArray(value.subagents, "subagents");
+  const tools = parseQuestionToolNameArray(value.tools, "tools");
+  assertExactMembers(
+    subagents,
+    QUESTION_AGENT_ROLES.filter((role) => role !== mainAgent),
+    "subagents",
+  );
+  assertExactMembers(tools, QUESTION_TOOL_NAMES, "tools");
+
   return {
     spec_version: specVersion,
-    main_agent: parseQuestionAgentRole(value.main_agent, "main_agent"),
-    subagents: parseQuestionAgentRoleArray(value.subagents, "subagents"),
-    tools: parseQuestionToolNameArray(value.tools, "tools"),
+    runtime_id: normalizeString(value.runtime_id) || "tutor-question-generation",
+    main_agent: mainAgent,
+    subagents,
+    tools,
     runtime_candidates: normalizeStringArray(value.runtime_candidates, "runtime_candidates"),
     human_controlled_fields: parseControlledFieldArray(value.human_controlled_fields, "human_controlled_fields"),
     agent_controlled_fields: normalizeStringArray(value.agent_controlled_fields, "agent_controlled_fields"),
@@ -234,6 +349,7 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     human_controlled_rules: normalizeStringArray(value.human_controlled_rules, "human_controlled_rules"),
     decision_rules: normalizeStringArray(value.decision_rules, "decision_rules"),
     validation_rules: normalizeStringArray(value.validation_rules, "validation_rules"),
+    tool_service: parseToolService(value.tool_service),
     tool_routing: parseToolRouting(value.tool_routing),
     final_response_contract: parseFinalResponseContract(value.final_response_contract),
   };
@@ -268,7 +384,7 @@ export function getQuestionAgentContract(): QuestionAgentContractDocument {
     cachedContract = loadQuestionAgentContract();
   }
   if (!cachedContract) {
-    throw new Error("Question agent contract failed to load");
+    throw new Error("题目生成智能体合同加载失败");
   }
   return cachedContract;
 }

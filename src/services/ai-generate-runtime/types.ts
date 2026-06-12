@@ -1,5 +1,6 @@
 import type { AiGenImagePlacementOrEmpty, AiGenPayload } from "../../types/ai-generate";
 import type { QuestionSpecNormalizeResponse } from "../../types/question-agent";
+import type { EvoqObjectiveDifficultyEvaluation } from "./evoq-irt";
 
 export interface RawGeneratedPayload {
   Item?: unknown;
@@ -99,6 +100,14 @@ export interface EvoqCandidateReview {
   mutation_instructions: string;
   rethink_instructions: string;
   next_action_hint: string;
+  objective_difficulty?: EvoqObjectiveDifficultyEvaluation;
+  actual_difficulty?: number;
+  is_diff_match?: boolean;
+  algorithm_difficulty_irt?: number;
+  difficulty_strict_match_irt?: 0 | 1;
+  difficulty_soft_match_irt?: 0 | 1;
+  passrate_irt_strict?: 0 | 1;
+  passrate_irt_soft?: 0 | 1;
 }
 
 export interface EvoqPopulationCandidate {

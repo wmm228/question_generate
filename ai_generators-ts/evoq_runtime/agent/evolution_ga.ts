@@ -66,16 +66,16 @@ function normalizeImagePlacement(value: string): AiGenImagePlacementOrEmpty {
 function buildSeedStrategies(popSize: number, contentMode: AiGenContentMode): string[] {
   const base = contentMode === "image"
     ? [
-        "Make the figure indispensable to solving the question.",
-        "Create clean distractors with answer-relevant visual detail.",
-        "Separate weak, medium, and strong students through the diagram reading burden.",
-        "Prefer compact stems but high information density inside the figure.",
+        "让图片成为解题所必需的信息来源。",
+        "生成干净的干扰项，并让视觉细节与答案相关。",
+        "通过读图负担区分薄弱、中等和较强学生。",
+        "题干尽量简洁，但图片内部保持较高信息密度。",
       ]
     : [
-        "Maximize distractor quality while keeping the answer unambiguous.",
-        "Use a concise but multi-step reasoning path.",
-        "Stress conceptual discrimination across students of different mastery.",
-        "Use a less routine scenario while preserving solvability.",
+        "在保证答案无歧义的前提下提高干扰项质量。",
+        "使用简洁但包含多步推理的解题路径。",
+        "强调概念区分度，让不同掌握水平的学生表现出差异。",
+        "使用不那么套路化但仍可解的题目情境。",
       ];
 
   const normalizedSize = Math.max(2, Math.min(popSize, base.length));

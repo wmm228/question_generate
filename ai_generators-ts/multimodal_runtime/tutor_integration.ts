@@ -63,32 +63,32 @@ function validateAndNormalizeSvg(value: string): string {
   let svg = stripSvgFence(value);
   const svgStart = svg.search(/<svg[\s>]/i);
   if (svgStart < 0) {
-    throw new Error("Image question is missing image_svg");
+    throw new Error("图文题缺少 image_svg");
   }
   svg = svg.slice(svgStart).trim();
   const svgEnd = svg.toLowerCase().lastIndexOf("</svg>");
   if (svgEnd < 0) {
-    throw new Error("image_svg must be a complete SVG document");
+    throw new Error("image_svg 必须是完整的 SVG 文档");
   }
   svg = svg.slice(0, svgEnd + "</svg>".length).trim();
 
   if (Buffer.byteLength(svg, "utf-8") > MAX_SVG_BYTES) {
-    throw new Error("image_svg is too large");
+    throw new Error("image_svg 体积过大");
   }
   if (!/^<svg[\s>]/i.test(svg)) {
-    throw new Error("image_svg must start with an <svg> root element");
+    throw new Error("image_svg 必须以 <svg> 根元素开头");
   }
   if (/<\s*!doctype|<\s*!entity|<\?xml-stylesheet/i.test(svg)) {
-    throw new Error("image_svg must not include external document declarations");
+    throw new Error("image_svg 不能包含外部文档声明");
   }
   if (/<\s*\/?\s*(?:script|foreignObject|iframe|object|embed|audio|video|image|link|meta|style|animate|set)\b/i.test(svg)) {
-    throw new Error("image_svg contains an unsupported SVG element");
+    throw new Error("image_svg 包含不支持的 SVG 元素");
   }
   if (/\s(?:on[a-z]+|href|xlink:href|src)\s*=/i.test(svg)) {
-    throw new Error("image_svg contains an unsafe attribute");
+    throw new Error("image_svg 包含不安全属性");
   }
   if (/javascript:|data:text\/html|url\s*\(/i.test(svg)) {
-    throw new Error("image_svg contains an unsafe reference");
+    throw new Error("image_svg 包含不安全引用");
   }
 
   if (!/^<svg\b[^>]*\sxmlns=/i.test(svg)) {

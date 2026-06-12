@@ -111,7 +111,9 @@ OAH_RUN_POLL_INTERVAL_MS=1000
 推荐再补上：
 
 ```env
-OAH_MODEL_NAME=platform/kimi-k25
+OAH_MODEL_NAME=platform/qwen_qwen3.5-397b-a17b
+OAH_MODEL_PRIORITY=platform/qwen_qwen3.5-397b-a17b,platform/qwen_qwen3-next-80b-a3b-instruct,platform/mistralai_ministral-14b-instruct-2512,platform/deepseek-ai_deepseek-v4-flash
+OAH_MODEL_FALLBACK_ENABLED=true
 TUTOR_PORT=7896
 TUTOR_STORAGE_BACKEND=filesystem
 SESSION_TTL_MS=2592000000
@@ -121,9 +123,10 @@ SESSION_TTL_MS=2592000000
 
 - `OAH_BASE_URL`：必填，指向 OAH API
 - `OAH_WORKSPACE_RUNTIME`：和 OAH 里已有 workspace/runtime 保持一致
-- `OAH_MODEL_NAME`：可选，不写时会使用 OAH workspace 默认模型
+- `OAH_MODEL_NAME`：建议明确写 `platform/qwen_qwen3.5-397b-a17b`；留空时 Tutor 会使用 `OAH_MODEL_PRIORITY` 的第一个 modelRef
+- `OAH_MODEL_PRIORITY`：模型优先级列表，当前默认在已通过 OAH live smoke 的 Qwen 3.5 397B、Qwen Next 80B、Ministral 14B、DeepSeek V4 Flash 之间 fallback
 - `OAH_INTENT_AGENT_NAME`：可选，默认使用 `intent-recognizer`
-- `OAH_INTENT_MODEL_NAME`：可选，单独指定意图识别模型；留空时沿用 `OAH_MODEL_NAME`
+- `OAH_INTENT_MODEL_NAME`：可选，单独指定意图识别模型；留空时沿用 `OAH_MODEL_NAME` 或 `OAH_MODEL_PRIORITY`
 - `TUTOR_PORT`：可选，默认 `7896`
 - `TUTOR_STORAGE_BACKEND`：可选，默认会走 `filesystem`
 

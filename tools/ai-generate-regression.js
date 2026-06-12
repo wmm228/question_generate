@@ -164,7 +164,7 @@ function readContractDocument() {
     throw new Error(`missing contract source: ${contractPath}`);
   }
   const markdown = fs.readFileSync(contractPath, "utf8");
-  const match = markdown.match(/## Machine-Readable Contract\s*```json\s*([\s\S]*?)\s*```/i);
+  const match = markdown.match(/## (?:Machine-Readable Contract|机器可读合同)\s*```json\s*([\s\S]*?)\s*```/i);
   if (!match || !match[1]) {
     throw new Error("machine-readable contract block missing");
   }
@@ -260,6 +260,36 @@ function run() {
 
   const contract = readContractDocument();
   assert(contract.main_agent === "question-orchestrator", "main_agent should be question-orchestrator");
+  assert(contract.runtime_id === "tutor-question-generation", "runtime_id should be tutor-question-generation");
+  assert(Array.isArray(contract.subagents) && contract.subagents.length === 8, "contract should keep all 8 migrated subagents");
+  assert(Array.isArray(contract.tools) && contract.tools.length === 9, "contract should keep all 9 migrated tools");
+  for (const agent of [
+    "spec-normalizer",
+    "intent-recognizer",
+    "text-question-generator",
+    "visual-question-generator",
+    "text-question-evaluator",
+    "visual-question-evaluator",
+    "student-simulator",
+    "profile-evolution",
+  ]) {
+    assert(contract.subagents.includes(agent), `missing migrated subagent: ${agent}`);
+  }
+  for (const tool of [
+    "validate_question_spec",
+    "generate_visual_question",
+    "run_evoq_text_question",
+    "render_question_image",
+    "simulate_student_response",
+    "evaluate_text_question",
+    "evaluate_visual_question",
+    "read_profile",
+    "write_profile",
+  ]) {
+    assert(contract.tools.includes(tool), `missing migrated tool: ${tool}`);
+    assert(isRecord(contract.tool_service), "tool_service missing");
+    assert(typeof contract.tool_service[tool] === "string", `tool_service missing endpoint for ${tool}`);
+  }
   for (const algorithm of ["direct", "cot", "react", "dear", "eqpr", "evoq"]) {
     assert(isRecord(contract.tool_routing), "tool_routing missing");
     assert(isRecord(contract.tool_routing.by_algorithm), "tool_routing.by_algorithm missing");

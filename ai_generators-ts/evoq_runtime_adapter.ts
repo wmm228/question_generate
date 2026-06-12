@@ -18,7 +18,7 @@ function assertValidPayload(payload: AiGenPayload): void {
 export async function runBaselineAlgorithm(payload: AiGenPayload, requestId?: string): Promise<AiGenerateResponse> {
   assertValidPayload(payload);
   if (!BASELINE_ALGORITHMS.has(payload.algorithm)) {
-    throw new Error(`Baseline adapter does not accept algorithm=${payload.algorithm}. Use one of: ${Array.from(BASELINE_ALGORITHMS).join(", ")}`);
+    throw new Error(`Baseline 适配器不接受 algorithm=${payload.algorithm}。可用算法：${Array.from(BASELINE_ALGORITHMS).join(", ")}`);
   }
   return generateAiQuestion(payload, requestId ?? buildRequestId(payload.algorithm));
 }

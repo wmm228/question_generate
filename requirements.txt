@@ -32,7 +32,9 @@ OAH_WORKSPACE_AUTO_CREATE=true
 OAH_RUN_POLL_INTERVAL_MS=1000
 
 # Optional env vars
-OAH_MODEL_NAME=platform/kimi-k25
+OAH_MODEL_NAME=platform/qwen_qwen3.5-397b-a17b
+OAH_MODEL_PRIORITY=platform/qwen_qwen3.5-397b-a17b,platform/qwen_qwen3-next-80b-a3b-instruct,platform/mistralai_ministral-14b-instruct-2512,platform/deepseek-ai_deepseek-v4-flash
+OAH_MODEL_FALLBACK_ENABLED=true
 TUTOR_PORT=7896
 TUTOR_STORAGE_BACKEND=filesystem
 SESSION_TTL_MS=2592000000

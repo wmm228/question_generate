@@ -49,6 +49,13 @@ function trimUrl(value: string | undefined): string {
   return trim(value).replace(/\/+$/, "");
 }
 
+function firstPriorityModel(value: string | undefined): string {
+  return trim(value)
+    .split(",")
+    .map((item) => item.trim())
+    .find(Boolean) || "";
+}
+
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   const normalized = trim(value).toLowerCase();
   if (!normalized) {
@@ -74,7 +81,7 @@ export function getOahCoreConfig(): OahCoreConfig {
   return {
     ...selector,
     baseUrl: trimUrl(process.env.OAH_BASE_URL) || DEFAULT_OAH_BASE_URL,
-    model: trim(process.env.OAH_MODEL_NAME),
+    model: trim(process.env.OAH_MODEL_NAME) || firstPriorityModel(process.env.OAH_MODEL_PRIORITY),
   };
 }
 
