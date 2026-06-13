@@ -114,6 +114,7 @@ export interface QuestionGenerationContract {
   evaluator_agent: QuestionAgentRole;
   required_tools: QuestionToolName[];
   algorithm: AiGenAlgorithm;
+  algorithm_agent: string;
   oah_runtime_candidates: string[];
 }
 
@@ -157,6 +158,7 @@ export interface QuestionAgentDesign {
     runtime_id: string;
     main_agent: QuestionAgentRole;
     subagents: QuestionAgentRole[];
+    algorithm_agents: Record<AiGenAlgorithm, string>;
     tools: QuestionToolName[];
     tool_service: QuestionAgentToolService;
   };
@@ -216,6 +218,7 @@ export interface QuestionAgentContractDocument {
   runtime_id: string;
   main_agent: QuestionAgentRole;
   subagents: QuestionAgentRole[];
+  algorithm_agents: Record<AiGenAlgorithm, string>;
   tools: QuestionToolName[];
   runtime_candidates: string[];
   human_controlled_fields: QuestionControlledFieldKey[];

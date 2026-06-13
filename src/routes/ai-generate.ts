@@ -11,6 +11,7 @@ import {
   type AiGenerateApiResponse,
   type AiGenPayload,
 } from "../types/ai-generate";
+import type { QuestionSpecNormalizeResponse } from "../types/question-agent";
 import { getRequestId, logEvent, serializeError } from "../utils/request";
 
 export type AuthMiddleware = RequestHandler;
@@ -24,6 +25,13 @@ export interface AiGenerateRouteOptions {
   generatePath?: string;
   statusPath?: string;
   resolveOwnerUid?: (req: Request) => string | null;
+  validateGenerationRequest?: (context: {
+    req: Request;
+    body: Record<string, unknown>;
+    requestId: string;
+    payload: AiGenPayload;
+    normalizedSpec: QuestionSpecNormalizeResponse;
+  }) => Promise<AiGenerateRequestBlock | null | undefined>;
   persistGeneratedQuestion?: (context: {
     req: Request;
     body: Record<string, unknown>;
@@ -39,6 +47,16 @@ export interface AiGenerateRouteOptions {
     errorMessage: string;
     result?: AiGenerateApiResponse;
   }) => Promise<void>;
+}
+
+export interface AiGenerateRequestBlock {
+  statusCode?: number;
+  error: string;
+  code?: string;
+  details?: unknown;
+  validation_errors?: string[];
+  spec?: unknown;
+  plan?: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -180,6 +198,38 @@ export function attachAiGenerateRoutes(
       });
       res.status(400).json({ error: validationError });
       return;
+    }
+
+    if (options.validateGenerationRequest) {
+      const requestBlock = await options.validateGenerationRequest({
+        req,
+        body,
+        requestId: publicReqId,
+        payload,
+        normalizedSpec,
+      });
+      if (requestBlock) {
+        const blockMessage = requestBlock.error || "生成请求被业务规则阻止。";
+        await deps.statusStore.updateStage(statusRequestId, "generate", "error", blockMessage);
+        await deps.statusStore.updateStage(statusRequestId, "evaluate", "error", "评估阶段未开始。");
+        await deps.statusStore.updateStage(statusRequestId, "render", "error", "响应组装阶段未开始。");
+        await deps.statusStore.appendLog(statusRequestId, blockMessage);
+        await deps.statusStore.finish(statusRequestId, blockMessage);
+        logEvent("warn", req, "ai_generate.request.blocked", {
+          spec_id: normalizedSpec.spec.spec_id,
+          code: requestBlock.code || "GENERATION_REQUEST_BLOCKED",
+          details: requestBlock.details,
+        });
+        res.status(requestBlock.statusCode || 400).json({
+          error: blockMessage,
+          ...(requestBlock.code ? { code: requestBlock.code } : {}),
+          ...(requestBlock.details !== undefined ? { details: requestBlock.details } : {}),
+          ...(requestBlock.validation_errors ? { validation_errors: requestBlock.validation_errors } : {}),
+          ...(requestBlock.spec ? { spec: requestBlock.spec } : {}),
+          ...(requestBlock.plan ? { plan: requestBlock.plan } : {}),
+        });
+        return;
+      }
     }
 
     try {

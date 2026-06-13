@@ -19,6 +19,14 @@
     "student-simulator",
     "profile-evolution"
   ],
+  "algorithm_agents": {
+    "direct": "direct-question-agent",
+    "cot": "cot-question-agent",
+    "react": "react-question-agent",
+    "dear": "dear-question-agent",
+    "eqpr": "eqpr-question-agent",
+    "evoq": "evoq-question-agent"
+  },
   "tools": [
     "validate_question_spec",
     "generate_visual_question",
@@ -136,10 +144,7 @@
   ],
   "tool_routing": {
     "shared": [
-      "validate_question_spec",
-      "read_profile",
-      "write_profile",
-      "simulate_student_response"
+      "validate_question_spec"
     ],
     "by_content_mode": {
       "text": {
@@ -169,7 +174,8 @@
       "dear": [],
       "eqpr": [],
       "evoq": [
-        "run_evoq_text_question"
+        "run_evoq_text_question",
+        "simulate_student_response"
       ]
     }
   },

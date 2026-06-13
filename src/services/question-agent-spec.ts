@@ -329,6 +329,7 @@ function buildGenerationContract(payload: AiGenPayload): QuestionGenerationContr
     evaluator_agent: resolveEvaluatorAgent(payload),
     required_tools: resolveRequiredTools(payload),
     algorithm: payload.algorithm,
+    algorithm_agent: contract.algorithm_agents[payload.algorithm],
     oah_runtime_candidates: [...contract.runtime_candidates],
   };
 }
@@ -343,6 +344,16 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
       ...contract.tool_routing.by_algorithm[spec.algorithm],
     ]),
   );
+  const evoqSimulationStep: QuestionAgentPlan["steps"] = spec.algorithm === "evoq"
+    ? [
+      {
+        role: "student-simulator",
+        action: "Run EvoQ IRT virtual student simulation for candidate selection and difficulty fit.",
+        tools: ["simulate_student_response"],
+        blocks_generation: false,
+      },
+    ]
+    : [];
 
   return {
     plan_id: `qplan_${randomUUID()}`,
@@ -351,7 +362,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
     steps: [
       {
         role: contract.main_agent,
-        action: "Collect missing teacher intent, explicit constraints, and preference profile signals.",
+        action: "Extract teacher-dialogue fields and update the portrait/profile state before generation.",
         tools: ["read_profile"],
         blocks_generation: blocksGeneration,
       },
@@ -369,6 +380,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
         tools: generatorTools,
         blocks_generation: false,
       },
+      ...evoqSimulationStep,
       {
         role: spec.generation_contract.evaluator_agent,
         action: spec.content_mode === "image"
@@ -378,14 +390,8 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
         blocks_generation: false,
       },
       {
-        role: "student-simulator",
-        action: "Estimate student response behavior and IRT fit for future profile updates.",
-        tools: ["simulate_student_response"],
-        blocks_generation: false,
-      },
-      {
         role: "profile-evolution",
-        action: "Persist teacher preference and student mastery updates outside the service process.",
+        action: "Persist generated question records and profile updates after generation.",
         tools: ["write_profile"],
         blocks_generation: false,
       },
@@ -448,6 +454,7 @@ export function buildQuestionAgentDesign(): QuestionAgentDesign {
       runtime_id: contract.runtime_id,
       main_agent: contract.main_agent,
       subagents: [...contract.subagents],
+      algorithm_agents: { ...contract.algorithm_agents },
       tools: [...contract.tools],
       tool_service: contract.tool_service,
     },

@@ -205,6 +205,22 @@ function parseToolRouting(value: unknown): QuestionAgentToolRouting {
   };
 }
 
+function parseAlgorithmAgentMap(value: unknown): Record<AiGenAlgorithm, string> {
+  if (!isRecord(value)) {
+    throw new Error("algorithm_agents must be an object");
+  }
+
+  const algorithmAgents = {} as Record<AiGenAlgorithm, string>;
+  for (const algorithm of AI_GEN_ALGORITHMS) {
+    const agentName = normalizeString(value[algorithm]);
+    if (!agentName) {
+      throw new Error(`algorithm_agents missing required algorithm: ${algorithm}`);
+    }
+    algorithmAgents[algorithm] = agentName;
+  }
+  return algorithmAgents;
+}
+
 function parseToolService(value: unknown): QuestionAgentToolService {
   if (!isRecord(value)) {
     throw new Error("tool_service must be an object");
@@ -333,12 +349,14 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     "subagents",
   );
   assertExactMembers(tools, QUESTION_TOOL_NAMES, "tools");
+  const algorithmAgents = parseAlgorithmAgentMap(value.algorithm_agents);
 
   return {
     spec_version: specVersion,
     runtime_id: normalizeString(value.runtime_id) || "tutor-question-generation",
     main_agent: mainAgent,
     subagents,
+    algorithm_agents: algorithmAgents,
     tools,
     runtime_candidates: normalizeStringArray(value.runtime_candidates, "runtime_candidates"),
     human_controlled_fields: parseControlledFieldArray(value.human_controlled_fields, "human_controlled_fields"),

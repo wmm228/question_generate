@@ -22,6 +22,7 @@ import {
   AI_GEN_QUESTION_TYPE_LABELS,
   normalizeAiGenPayload,
   type AiGenerateApiResponse,
+  type AiGenPayload,
 } from "../types/ai-generate";
 import {
   buildQuestionAgentDesign,
@@ -92,6 +93,86 @@ function readRequestBody(req: Request): Record<string, unknown> {
 
 function normalizeStatusString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeComparableStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(new Set(value.map((item) => normalizeStatusString(item)).filter(Boolean))).sort();
+}
+
+function compareGenerationField(
+  mismatches: string[],
+  field: string,
+  expected: unknown,
+  actual: unknown,
+): void {
+  if (normalizeStatusString(expected) !== normalizeStatusString(actual)) {
+    mismatches.push(field);
+  }
+}
+
+function compareGenerationListField(
+  mismatches: string[],
+  field: string,
+  expected: unknown,
+  actual: unknown,
+): void {
+  const expectedList = normalizeComparableStrings(expected);
+  const actualList = normalizeComparableStrings(actual);
+  if (JSON.stringify(expectedList) !== JSON.stringify(actualList)) {
+    mismatches.push(field);
+  }
+}
+
+function readPortraitGenerationFieldMismatches(
+  portrait: QuestionPortraitDocument,
+  payload: AiGenPayload,
+): string[] {
+  const mismatches: string[] = [];
+  compareGenerationField(mismatches, "subject", portrait.draft.subject || portrait.spec.subject, payload.subject);
+  compareGenerationField(
+    mismatches,
+    "knowledge_point",
+    portrait.draft.knowledge_point || portrait.spec.knowledge_point,
+    payload.knowledge_point,
+  );
+  compareGenerationField(
+    mismatches,
+    "difficulty",
+    portrait.draft.difficulty || String(portrait.spec.difficulty_level || ""),
+    payload.difficulty,
+  );
+  compareGenerationField(mismatches, "algorithm", portrait.draft.algorithm || portrait.spec.algorithm, payload.algorithm);
+  compareGenerationField(
+    mismatches,
+    "question_type",
+    portrait.draft.question_type || portrait.spec.question_type,
+    payload.question_type,
+  );
+  compareGenerationField(
+    mismatches,
+    "content_mode",
+    portrait.draft.content_mode || portrait.spec.content_mode,
+    payload.content_mode,
+  );
+  compareGenerationField(
+    mismatches,
+    "image_mode",
+    portrait.draft.image_mode || portrait.spec.image_requirement.mode,
+    payload.image_mode,
+  );
+  compareGenerationListField(
+    mismatches,
+    "image_targets",
+    portrait.draft.image_targets.length > 0 ? portrait.draft.image_targets : portrait.spec.image_requirement.targets,
+    payload.image_targets,
+  );
+  if (portrait.draft.content_mode === "image" && portrait.draft.image_placement) {
+    compareGenerationField(mismatches, "image_placement", portrait.draft.image_placement, payload.image_placement);
+  }
+  return mismatches;
 }
 
 function readQueryString(req: Request, key: string): string {
@@ -2115,6 +2196,65 @@ export function createQuestionAgentRouter(deps: QuestionAgentRouterDependencies)
     generatePath: "/generate",
     statusPath: "/status/:requestId",
     resolveOwnerUid: deps.getUidFromReq,
+    validateGenerationRequest: async ({ req, body, payload }) => {
+      const ownerUid = deps.getUidFromReq(req);
+      const portraitId = normalizeStatusString(body.portrait_id);
+      if (!portraitId) {
+        return null;
+      }
+      if (!ownerUid) {
+        return {
+          statusCode: 401,
+          error: "需要登录后才能从画像生成题目。",
+          code: "AUTH_REQUIRED",
+        };
+      }
+
+      const portrait = await deps.portraitStore.load(ownerUid, portraitId);
+      if (!portrait) {
+        return {
+          statusCode: 404,
+          error: "画像不存在，不能生成题目。",
+          code: "PORTRAIT_NOT_FOUND",
+          details: { portrait_id: portraitId },
+        };
+      }
+
+      const portraitReady = portrait.status === "ready" && portrait.spec.status === "ready";
+      if (!portraitReady) {
+        return {
+          statusCode: 409,
+          error: "画像尚未完整，不能生成题目。",
+          code: "PORTRAIT_NOT_READY",
+          details: {
+            portrait_id: portraitId,
+            portrait_status: portrait.status,
+            spec_status: portrait.spec.status,
+            pending_field: portrait.pending_field,
+          },
+          validation_errors: portrait.validation_errors,
+          spec: portrait.spec,
+          plan: portrait.plan,
+        };
+      }
+
+      const mismatches = readPortraitGenerationFieldMismatches(portrait, payload);
+      if (mismatches.length > 0) {
+        return {
+          statusCode: 409,
+          error: "生成请求与当前画像不一致，请先同步或重新提交画像规范。",
+          code: "PORTRAIT_SPEC_MISMATCH",
+          details: {
+            portrait_id: portraitId,
+            mismatched_fields: mismatches,
+          },
+          spec: portrait.spec,
+          plan: portrait.plan,
+        };
+      }
+
+      return null;
+    },
     persistGeneratedQuestion: async ({ req, body, requestId, result }) => {
       const ownerUid = deps.getUidFromReq(req);
       const portraitId = normalizeStatusString(body.portrait_id);
