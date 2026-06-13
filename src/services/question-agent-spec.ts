@@ -140,7 +140,13 @@ function normalizeFitnessDiffMetric(value: string): EvoqGenerationConfig["fitnes
 }
 
 function mergeRecordInputs(...values: unknown[]): Record<string, unknown> {
-  return Object.assign({}, ...values.filter(isRecord));
+  const merged: Record<string, unknown> = {};
+  for (const value of values) {
+    if (isRecord(value)) {
+      Object.assign(merged, value);
+    }
+  }
+  return merged;
 }
 
 function normalizeEvoqGenerationConfig(input: QuestionSpecInput): EvoqGenerationConfig {

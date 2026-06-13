@@ -107,7 +107,7 @@ function makeReview(stageKey) {
   });
 }
 
-function makeRuntime(algorithm) {
+function makeRuntime(algorithm, options = {}) {
   const payload = makePayload(algorithm);
   const specContext = normalizeQuestionGenerationSpec({
     ...payload,
@@ -115,6 +115,7 @@ function makeRuntime(algorithm) {
   });
   const generatorStages = [];
   const evaluatorStages = [];
+  let malformedEvoqReviewsRemaining = Number(options.malformedEvoqReviews || 0);
 
   const runtime = {
     payload,
@@ -195,6 +196,10 @@ function makeRuntime(algorithm) {
         });
       }
       if (stageKey.includes("evoq-rank")) {
+        if (malformedEvoqReviewsRemaining > 0) {
+          malformedEvoqReviewsRemaining -= 1;
+          return "评审器输出了自然语言，没有返回 JSON。";
+        }
         return makeReview(stageKey);
       }
       return JSON.stringify(makeEvaluation(true));
@@ -228,6 +233,15 @@ function makeRuntime(algorithm) {
   };
 
   return { runtime, generatorStages, evaluatorStages };
+}
+
+async function smokeEvoqMalformedReviewFallback() {
+  const { runtime, evaluatorStages } = makeRuntime("evoq", { malformedEvoqReviews: 1 });
+  const result = await executeAlgorithmStrategy(runtime);
+  assert(result.question.includes("一次函数"), "evoq malformed review fallback: question should be generated");
+  assert(Array.isArray(result.options) && result.options.length === 4, "evoq malformed review fallback: options should have 4 entries");
+  assert(result.ground_truth === "A", "evoq malformed review fallback: ground_truth should be A");
+  assert(evaluatorStages.some((stage) => stage.includes("evoq-rank")), "evoq malformed review fallback: missing rank stage");
 }
 
 function assert(condition, message) {
@@ -342,6 +356,7 @@ function smokeOahDeploymentConfig() {
 async function run() {
   smokeOahDeploymentConfig();
   await smokeEvoqIrtContract();
+  await smokeEvoqMalformedReviewFallback();
   const summaries = [];
   for (const algorithm of algorithms) {
     summaries.push(await smokeAlgorithm(algorithm));

@@ -411,9 +411,15 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function removeInvalidXmlControlCharacters(value: string): string {
+  return Array.from(value).filter((character) => {
+    const codePoint = character.charCodeAt(0);
+    return codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d || codePoint >= 0x20;
+  }).join("");
+}
+
 function escapeXml(value: string): string {
-  return value
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+  return removeInvalidXmlControlCharacters(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

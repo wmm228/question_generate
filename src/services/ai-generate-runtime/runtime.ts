@@ -374,6 +374,14 @@ function validateMultipleChoiceOptions(options: string[]): string[] {
   return normalizedOptions;
 }
 
+function serializeMultipleChoiceOptionsForPrompt(options: string[]): string[] {
+  return options.map((option, index) => {
+    const key = OPTION_KEYS[index];
+    const text = stripMultipleChoiceOptionLabel(option);
+    return key ? `${key}. ${text}` : text;
+  });
+}
+
 function extractMultipleChoiceParts(question: string): { question: string; options: string[] } {
   const lines = question.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const optionPattern = /^([A-D])\s*[.、:：)]\s*(.*)$/;
@@ -568,7 +576,7 @@ export function serializeNormalizedDraftForPrompt(raw: NormalizedRawGeneratedPay
   return JSON.stringify(
     {
       question: raw.question,
-      ...(raw.options && raw.options.length > 0 ? { options: raw.options } : {}),
+      ...(raw.options && raw.options.length > 0 ? { options: serializeMultipleChoiceOptionsForPrompt(raw.options) } : {}),
       solution_steps: raw.solution_steps,
       ground_truth: raw.ground_truth,
       ...(raw.image_position ? { image_position: raw.image_position } : {}),
@@ -673,11 +681,24 @@ function buildDirectEvaluatorMessage(
           "答案是否正确，教学质量是否达标。",
         ];
 
+  const schemaChecks = [
+    payload.question_type === "multiple_choice"
+      ? "Schema contract: options is an ordered 4-item array in A/B/C/D order; option strings do not need A./B./C./D. prefixes."
+      : "",
+    payload.question_type === "multiple_choice"
+      ? "Schema contract: ground_truth must be exactly one option letter such as A, B, C, or D; do not require a label like answer: C."
+      : "",
+    "Schema contract: solution_steps is the analysis/explanation field; do not require a separate analysis field.",
+    payload.content_mode === "text"
+      ? "Schema contract: content_mode=text means no diagram/image is required; do not fail only because no visual aid is provided."
+      : "",
+  ].filter(Boolean);
+
   return applyBindings(loadQuestionAgentPromptTemplate("direct-evaluator.md"), {
     subject: payload.subject,
     spec_json: buildPromptSpecJson(specContext.spec),
     draft_json: generatedDraftJson,
-    checklist: checks.map((item, index) => `${index + 1}. ${item}`).join("\n"),
+    checklist: [...checks, ...schemaChecks].map((item, index) => `${index + 1}. ${item}`).join("\n"),
   }).concat(
     strictJsonOnly
       ? '\n\n重试要求：\n- 你上一轮的回复没有满足评估器约定的 JSON 结构。\n- 这一次只能返回 direct-evaluator.md 约定的评估 JSON。\n- 不要返回题目草稿 JSON。\n- 不要在 JSON 之外输出任何文字。\n'

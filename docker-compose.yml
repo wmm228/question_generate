@@ -9,6 +9,7 @@ services:
       eduqg-tool:
         condition: service_healthy
     environment:
+      NODE_OPTIONS: "--max-old-space-size=4096"
       OAH_NATIVE_WORKSPACE_SYNC: "0"
       OAH_NATIVE_WORKSPACE_SYNC_PERSISTENT: "0"
     volumes:

@@ -23,7 +23,6 @@ const ROLE_SET = new Set<string>(QUESTION_AGENT_ROLES);
 const CAPABILITY_SET = new Set<string>(QUESTION_AGENT_CAPABILITIES);
 const CONTROLLED_FIELD_SET = new Set<string>(QUESTION_CONTROLLED_FIELD_KEYS);
 const CONTENT_MODE_SET = new Set<string>(AI_GEN_CONTENT_MODES);
-const ALGORITHM_SET = new Set<string>(AI_GEN_ALGORITHMS);
 
 let cachedContract: QuestionAgentContractDocument | null = null;
 let cachedContractSourcePath = "";

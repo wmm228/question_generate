@@ -336,7 +336,21 @@ async function rethinkDearDraft(
     })),
     stageKey,
   );
-  const draft = runtime.parseDraft(content);
+  let draft: DraftArtifact;
+  try {
+    draft = runtime.parseDraft(content);
+  } catch (error) {
+    runtime.updateProgress({
+      stage: "generate",
+      state: "active",
+      detail: "DeAR Rethink 未返回合法题目 JSON，已保留上一版可解析草稿继续评估。",
+      log: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      ...branch,
+      rationale: `${branch.rationale}\n${rationale}`.trim(),
+    };
+  }
   return {
     draft,
     goal: branch.goal,
@@ -706,6 +720,35 @@ function parseEvoqReview(runtime: AiGenerateRuntime, content: string): EvoqCandi
   };
 }
 
+function fallbackEvoqReviewFromParseError(error: unknown): EvoqCandidateReview {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    passed: false,
+    score: 1,
+    fitness: 1,
+    strengths: [],
+    weaknesses: ["EvoQ 候选评审器没有返回合法 JSON。"],
+    issues: ["EvoQ 候选评审解析失败。"],
+    mutation_instructions: "重新生成或变异该候选题，并严格返回合法 JSON 评审对象。",
+    rethink_instructions: "检查题目 JSON、答案、解析、难度和图文相关性后重新评审。",
+    next_action_hint: message,
+  };
+}
+
+function safeParseEvoqReview(runtime: AiGenerateRuntime, content: string, stageKey: string): EvoqCandidateReview {
+  try {
+    return parseEvoqReview(runtime, content);
+  } catch (error) {
+    runtime.updateProgress({
+      stage: "evaluate",
+      state: "active",
+      detail: "EvoQ 候选评审解析失败，已将该候选按低分处理并继续进化。",
+      log: `stage=${stageKey}; ${error instanceof Error ? error.message : String(error)}`,
+    });
+    return fallbackEvoqReviewFromParseError(error);
+  }
+}
+
 async function reviewEvoqCandidate(
   runtime: AiGenerateRuntime,
   draft: DraftArtifact,
@@ -730,7 +773,7 @@ async function reviewEvoqCandidate(
     })),
     stageKey,
   );
-  return applyEvoqObjectiveDifficultyToReview(parseEvoqReview(runtime, reviewContent), objectiveDifficulty);
+  return applyEvoqObjectiveDifficultyToReview(safeParseEvoqReview(runtime, reviewContent, stageKey), objectiveDifficulty);
 }
 
 async function buildEvoqCandidate(
