@@ -329,7 +329,10 @@ function buildGenerationContract(payload: AiGenPayload): QuestionGenerationContr
     evaluator_agent: resolveEvaluatorAgent(payload),
     required_tools: resolveRequiredTools(payload),
     algorithm: payload.algorithm,
-    algorithm_agent: contract.algorithm_agents[payload.algorithm],
+    algorithm_route: {
+      ...contract.algorithm_routes[payload.algorithm],
+      required_tools: [...contract.algorithm_routes[payload.algorithm].required_tools],
+    },
     oah_runtime_candidates: [...contract.runtime_candidates],
   };
 }
@@ -454,8 +457,21 @@ export function buildQuestionAgentDesign(): QuestionAgentDesign {
       runtime_id: contract.runtime_id,
       main_agent: contract.main_agent,
       subagents: [...contract.subagents],
-      algorithm_agents: { ...contract.algorithm_agents },
-      public_agent_groups: [...contract.public_agent_groups],
+      routing_model: {
+        ...contract.routing_model,
+        order: [...contract.routing_model.order],
+        content_modes: [...contract.routing_model.content_modes],
+        algorithms: [...contract.routing_model.algorithms],
+      },
+      algorithm_routes: Object.fromEntries(
+        Object.entries(contract.algorithm_routes).map(([algorithm, route]) => [
+          algorithm,
+          {
+            ...route,
+            required_tools: [...route.required_tools],
+          },
+        ]),
+      ) as typeof contract.algorithm_routes,
       tools: [...contract.tools],
       tool_service: contract.tool_service,
     },

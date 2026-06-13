@@ -114,7 +114,7 @@ export interface QuestionGenerationContract {
   evaluator_agent: QuestionAgentRole;
   required_tools: QuestionToolName[];
   algorithm: AiGenAlgorithm;
-  algorithm_agent: string;
+  algorithm_route: QuestionAgentAlgorithmRoute;
   oah_runtime_candidates: string[];
 }
 
@@ -158,8 +158,8 @@ export interface QuestionAgentDesign {
     runtime_id: string;
     main_agent: QuestionAgentRole;
     subagents: QuestionAgentRole[];
-    algorithm_agents: Record<AiGenAlgorithm, string>;
-    public_agent_groups: QuestionAgentPublicGroup[];
+    routing_model: QuestionAgentRoutingModel;
+    algorithm_routes: Record<AiGenAlgorithm, QuestionAgentAlgorithmRoute>;
     tools: QuestionToolName[];
     tool_service: QuestionAgentToolService;
   };
@@ -178,11 +178,17 @@ export interface QuestionAgentConfirmationRequirement {
   message: string;
 }
 
-export interface QuestionAgentPublicGroup {
-  name: string;
-  owner: string;
-  members: string[];
-  purpose: string;
+export interface QuestionAgentRoutingModel {
+  order: Array<"content_mode" | "algorithm">;
+  content_modes: AiGenContentMode[];
+  algorithms: AiGenAlgorithm[];
+  oah_agent_surface: "functional_agents";
+}
+
+export interface QuestionAgentAlgorithmRoute {
+  strategy: AiGenAlgorithm;
+  required_tools: QuestionToolName[];
+  requires_student_simulation: boolean;
 }
 
 export interface QuestionAgentContentModeRoute {
@@ -226,9 +232,8 @@ export interface QuestionAgentContractDocument {
   runtime_id: string;
   main_agent: QuestionAgentRole;
   subagents: QuestionAgentRole[];
-  algorithm_agents: Record<AiGenAlgorithm, string>;
-  public_agent_groups: QuestionAgentPublicGroup[];
-  compatibility_policy: string[];
+  routing_model: QuestionAgentRoutingModel;
+  algorithm_routes: Record<AiGenAlgorithm, QuestionAgentAlgorithmRoute>;
   tools: QuestionToolName[];
   runtime_candidates: string[];
   human_controlled_fields: QuestionControlledFieldKey[];

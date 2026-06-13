@@ -6,11 +6,12 @@ import {
   QUESTION_AGENT_ROLES,
   QUESTION_CONTROLLED_FIELD_KEYS,
   QUESTION_TOOL_NAMES,
+  type QuestionAgentAlgorithmRoute,
   type QuestionAgentConfirmationRequirement,
   type QuestionAgentContentModeRoute,
   type QuestionAgentContractDocument,
   type QuestionAgentFinalResponseContract,
-  type QuestionAgentPublicGroup,
+  type QuestionAgentRoutingModel,
   type QuestionAgentRole,
   type QuestionAgentToolService,
   type QuestionAgentToolRouting,
@@ -206,45 +207,53 @@ function parseToolRouting(value: unknown): QuestionAgentToolRouting {
   };
 }
 
-function parseAlgorithmAgentMap(value: unknown): Record<AiGenAlgorithm, string> {
+function parseRoutingModel(value: unknown): QuestionAgentRoutingModel {
   if (!isRecord(value)) {
-    throw new Error("algorithm_agents must be an object");
+    throw new Error("routing_model must be an object");
   }
 
-  const algorithmAgents = {} as Record<AiGenAlgorithm, string>;
-  for (const algorithm of AI_GEN_ALGORITHMS) {
-    const agentName = normalizeString(value[algorithm]);
-    if (!agentName) {
-      throw new Error(`algorithm_agents missing required algorithm: ${algorithm}`);
-    }
-    algorithmAgents[algorithm] = agentName;
+  const order = normalizeStringArray(value.order, "routing_model.order");
+  if (JSON.stringify(order) !== JSON.stringify(["content_mode", "algorithm"])) {
+    throw new Error("routing_model.order must be content_mode then algorithm");
   }
-  return algorithmAgents;
+  const contentModes = normalizeStringArray(value.content_modes, "routing_model.content_modes");
+  assertExactMembers(contentModes, AI_GEN_CONTENT_MODES, "routing_model.content_modes");
+  const algorithms = normalizeStringArray(value.algorithms, "routing_model.algorithms");
+  assertExactMembers(algorithms, AI_GEN_ALGORITHMS, "routing_model.algorithms");
+  const oahAgentSurface = normalizeString(value.oah_agent_surface);
+  if (oahAgentSurface !== "functional_agents") {
+    throw new Error("routing_model.oah_agent_surface must be functional_agents");
+  }
+  return {
+    order: ["content_mode", "algorithm"],
+    content_modes: contentModes as AiGenContentMode[],
+    algorithms: algorithms as AiGenAlgorithm[],
+    oah_agent_surface: oahAgentSurface,
+  };
 }
 
-function parsePublicAgentGroups(value: unknown): QuestionAgentPublicGroup[] {
-  if (!Array.isArray(value)) {
-    throw new Error("public_agent_groups must be an array");
+function parseAlgorithmRouteMap(value: unknown): Record<AiGenAlgorithm, QuestionAgentAlgorithmRoute> {
+  if (!isRecord(value)) {
+    throw new Error("algorithm_routes must be an object");
   }
 
-  return value.map((item, index) => {
-    if (!isRecord(item)) {
-      throw new Error(`public_agent_groups[${index}] must be an object`);
+  const algorithmRoutes = {} as Record<AiGenAlgorithm, QuestionAgentAlgorithmRoute>;
+  for (const algorithm of AI_GEN_ALGORITHMS) {
+    const route = value[algorithm];
+    if (!isRecord(route)) {
+      throw new Error(`algorithm_routes.${algorithm} must be an object`);
     }
-    const name = normalizeString(item.name);
-    const owner = normalizeString(item.owner);
-    const members = normalizeStringArray(item.members, `public_agent_groups[${index}].members`);
-    const purpose = normalizeString(item.purpose);
-    if (!name || !owner || members.length === 0 || !purpose) {
-      throw new Error(`public_agent_groups[${index}] requires name, owner, members, and purpose`);
+    const strategy = normalizeString(route.strategy);
+    if (strategy !== algorithm) {
+      throw new Error(`algorithm_routes.${algorithm}.strategy must be ${algorithm}`);
     }
-    return {
-      name,
-      owner,
-      members,
-      purpose,
+    algorithmRoutes[algorithm] = {
+      strategy: algorithm,
+      required_tools: parseQuestionToolNameArray(route.required_tools, `algorithm_routes.${algorithm}.required_tools`),
+      requires_student_simulation: route.requires_student_simulation === true,
     };
-  });
+  }
+  return algorithmRoutes;
 }
 
 function parseToolService(value: unknown): QuestionAgentToolService {
@@ -375,17 +384,16 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     "subagents",
   );
   assertExactMembers(tools, QUESTION_TOOL_NAMES, "tools");
-  const algorithmAgents = parseAlgorithmAgentMap(value.algorithm_agents);
-  const publicAgentGroups = parsePublicAgentGroups(value.public_agent_groups);
+  const routingModel = parseRoutingModel(value.routing_model);
+  const algorithmRoutes = parseAlgorithmRouteMap(value.algorithm_routes);
 
   return {
     spec_version: specVersion,
     runtime_id: normalizeString(value.runtime_id) || "tutor-question-generation",
     main_agent: mainAgent,
     subagents,
-    algorithm_agents: algorithmAgents,
-    public_agent_groups: publicAgentGroups,
-    compatibility_policy: normalizeStringArray(value.compatibility_policy, "compatibility_policy"),
+    routing_model: routingModel,
+    algorithm_routes: algorithmRoutes,
     tools,
     runtime_candidates: normalizeStringArray(value.runtime_candidates, "runtime_candidates"),
     human_controlled_fields: parseControlledFieldArray(value.human_controlled_fields, "human_controlled_fields"),

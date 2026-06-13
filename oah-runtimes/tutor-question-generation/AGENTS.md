@@ -19,75 +19,60 @@
     "student-simulator",
     "profile-evolution"
   ],
-  "algorithm_agents": {
-    "direct": "direct-question-agent",
-    "cot": "cot-question-agent",
-    "react": "react-question-agent",
-    "dear": "dear-question-agent",
-    "eqpr": "eqpr-question-agent",
-    "evoq": "evoq-question-agent"
+  "routing_model": {
+    "order": [
+      "content_mode",
+      "algorithm"
+    ],
+    "content_modes": [
+      "text",
+      "image"
+    ],
+    "algorithms": [
+      "direct",
+      "cot",
+      "react",
+      "dear",
+      "eqpr",
+      "evoq"
+    ],
+    "oah_agent_surface": "functional_agents"
   },
-  "public_agent_groups": [
-    {
-      "name": "orchestrator",
-      "owner": "question-orchestrator",
-      "members": [
-        "question-orchestrator",
-        "spec-normalizer",
-        "intent-recognizer"
-      ],
-      "purpose": "对话抽字段、更新 portrait/profile、归一化 spec、执行 ready gating 和路由。"
+  "algorithm_routes": {
+    "direct": {
+      "strategy": "direct",
+      "required_tools": [],
+      "requires_student_simulation": false
     },
-    {
-      "name": "algorithm-generation",
-      "owner": "question-generator",
-      "members": [
-        "direct-question-agent",
-        "cot-question-agent",
-        "react-question-agent",
-        "dear-question-agent",
-        "eqpr-question-agent",
-        "evoq-question-agent",
-        "text-question-generator",
-        "visual-question-generator"
-      ],
-      "purpose": "保留六种核心算法能力，按教师选择分派到文本或图文生成策略。"
+    "cot": {
+      "strategy": "cot",
+      "required_tools": [],
+      "requires_student_simulation": false
     },
-    {
-      "name": "question-evaluation",
-      "owner": "question-evaluator",
-      "members": [
-        "text-question-evaluator",
-        "visual-question-evaluator"
-      ],
-      "purpose": "统一评估答案正确性、难度匹配、schema 合规和图文相关性。"
+    "react": {
+      "strategy": "react",
+      "required_tools": [],
+      "requires_student_simulation": false
     },
-    {
-      "name": "evoq-student-simulation",
-      "owner": "student-simulator",
-      "members": [
-        "student-simulator",
+    "dear": {
+      "strategy": "dear",
+      "required_tools": [],
+      "requires_student_simulation": false
+    },
+    "eqpr": {
+      "strategy": "eqpr",
+      "required_tools": [],
+      "requires_student_simulation": false
+    },
+    "evoq": {
+      "strategy": "evoq",
+      "required_tools": [
+        "run_evoq_text_question",
         "simulate_student_response"
       ],
-      "purpose": "EvoQ 必跑 IRT 虚拟学生模拟，不作为可选后处理。"
-    },
-    {
-      "name": "profile-persistence",
-      "owner": "profile-store",
-      "members": [
-        "profile-evolution",
-        "read_profile",
-        "write_profile"
-      ],
-      "purpose": "画像持久化能力；Tutor 产品流由 portrait store 承担，独立 OAH/skill 服务由 read_profile/write_profile 承担。"
+      "requires_student_simulation": true
     }
-  ],
-  "compatibility_policy": [
-    "对外按 public_agent_groups 理解和展示；不要把 8 个 subagents 当成产品层必须暴露的 8 个独立智能体。",
-    "subagents 和 9 个原工具名保留为内部兼容合同，避免破坏 Tutor 前端、回归脚本和 Docker/OAH 部署。",
-    "收口阶段只合并暴露面和文档口径，不删除六算法、不删除画像 ready gating、不删除 EvoQ 学生模拟。",
-    "后续如需真正重命名或删除兼容角色，必须先迁移前端、测试、OAH settings 和部署脚本。"
-  ],
+  },
   "tools": [
     "validate_question_spec",
     "generate_visual_question",
@@ -185,7 +170,7 @@
     "生成结果展示给用户前必须完成 schema 校验。",
     "图文题必须包含参与作答的有效视觉信息，不能只生成装饰性图片。",
     "教师画像和学生画像只是上下文信号，不能覆盖教师明确提出的请求字段。",
-    "可选的 evoq_config 只控制 EvoQ 的 GA 执行参数，不能改变教师已确认的学科、知识点、难度、题型、内容模式或算法。",
+    "evoq_config 只控制 EvoQ 的 GA 执行参数，不能改变教师已确认的学科、知识点、难度、题型、内容模式或算法。",
     "学生模拟必须把 student_profile、题目 metadata 或工具 payload 中的 EvoQ Rasch/1PL IRT theta 和 difficulty_b 参数传入 simulate_student_response，并返回 EvoQ IRT 虚拟学生模型组。"
   ],
   "decision_rules": [
@@ -201,7 +186,7 @@
     "图文题必须至少包含一个配图目标，并要求图片内容与作答相关。",
     "单选题必须生成 4 个选项，并且只有一个标准答案选项键。",
     "AI 输出展示前必须完成解析和 schema 校验。",
-    "请求学生模拟时，使用 EvoQ Rasch/1PL IRT 字段：ability_theta/theta、difficulty_b/b、probability_correct = sigmoid(theta - difficulty_b)，并返回配置中的虚拟学生模型响应 evoq_irt_ensemble。"
+    "algorithm=evoq 时，必须使用 EvoQ Rasch/1PL IRT 字段：ability_theta/theta、difficulty_b/b、probability_correct = sigmoid(theta - difficulty_b)，并返回配置中的虚拟学生模型响应 evoq_irt_ensemble。"
   ],
   "tool_routing": {
     "shared": [
@@ -284,19 +269,17 @@
 
 ## 架构说明
 
-本运行时采用收口后的对外结构：`1 个主智能体 + 6 个算法智能体 + 4 类服务能力`。
+本运行时按 OAH 原生结构工作：真实 OAH agent 定义在 `.openharness/agents/*.md`，算法不是额外伪造的 OAH agent 文件，而是生成阶段的策略路由。
 
 - 主智能体：`question-orchestrator` 负责教师对话、字段抽取、画像/spec ready gating 和路由。
-- 六算法智能体：`direct-question-agent`、`cot-question-agent`、`react-question-agent`、`dear-question-agent`、`eqpr-question-agent`、`evoq-question-agent` 是核心能力，不能删。
-- 生成服务：`text-question-generator` 与 `visual-question-generator` 是内部兼容角色，对外收口为 question-generator。
-- 评估服务：`text-question-evaluator` 与 `visual-question-evaluator` 是内部兼容角色，对外收口为 question-evaluator。
-- EvoQ 学生模拟：`student-simulator` 是 EvoQ 必需能力，必须调用 `simulate_student_response`。
-- 画像持久化：`profile-evolution`、`read_profile`、`write_profile` 是画像持久化能力；Tutor 产品流主要由 `portrait_id` 和 portrait store 落地。
+- OAH 功能子智能体：`spec-normalizer`、`intent-recognizer`、文本/图文生成器、文本/图文评估器、`student-simulator`、`profile-evolution` 保留为运行时分工。
+- 算法策略：`direct`、`cot`、`react`、`dear`、`eqpr`、`evoq` 是核心生成路线，由 `routing_model` 和 `algorithm_routes` 描述，不再写成不存在的算法 OAH agent 名。
+- 路由顺序固定为：先按 `content_mode` 进入文本或图文生成/评估，再按 `algorithm` 选择生成策略。
+- `algorithm=evoq` 必须调用 `simulate_student_response`，学生模拟是 EvoQ 出题路径的一部分。
+- 画像持久化仍由 Tutor 产品流的 `portrait_id` 和 portrait store 落地；独立 OAH/skill 服务保留 `read_profile`/`write_profile` 作为工具接口。
 
-机器可读合同中的 8 个 `subagents` 和 9 个工具名是兼容层，不代表产品层必须暴露 8 个独立智能体，也不代表每次出题都全部调用。
-
+8 个 `subagents` 和 9 个工具名是 OAH 运行能力清单，不代表前端或产品层需要暴露 8 个入口，也不代表每次出题都会全部调用。当前减重目标是收口合同和文档口径，不删除六算法、画像 ready gating、EvoQ 学生模拟或现有工具服务。
 教师控制字段必须来自教师请求、业务请求或业务默认值，不能由画像推断覆盖：学科、知识点、难度、题型、内容模式、算法和配图要求。
-
 记忆模型：
 
 - `session_memory` 是当前对话的长期压缩状态。

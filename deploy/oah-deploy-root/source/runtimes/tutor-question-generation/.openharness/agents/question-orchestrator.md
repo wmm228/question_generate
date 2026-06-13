@@ -55,10 +55,10 @@ policy:
 - 当归一化规格已就绪，但仍需独立判断当前轮是否授权生成时，使用 `intent-recognizer`。
 - 纯文本题使用 `text-question-generator`。
 - 图文题和 Manim 代码使用 `visual-question-generator`。
-- `algorithm=evoq` 时使用 `run_evoq_text_question`；原样转发 `evoq_config`、`evoq` 或 `ga` 设置，不得改变教师控制字段。
+- `algorithm=evoq` 时使用 `run_evoq_text_question`，并必须调用 `student-simulator` / `simulate_student_response`；原样转发 `evoq_config`、`evoq` 或 `ga` 设置，不得改变教师控制字段。
 - 纯文本题评估使用 `text-question-evaluator`。
 - 图文题评估使用 `visual-question-evaluator`，包括图片相关性和渲染安全检查。
-- 只有当请求包含学生画像或 IRT 模拟需求时，才使用 `student-simulator`；转发 `ability_theta/theta`、掌握度信号和 `difficulty_b/b`。
+- 当 `algorithm=evoq` 时必须使用 `student-simulator`；转发 `ability_theta/theta`、掌握度信号和 `difficulty_b/b`。
 - 只有需要建议教师/学生画像更新时，才使用 `profile-evolution`。
 
 必需生成流程：
