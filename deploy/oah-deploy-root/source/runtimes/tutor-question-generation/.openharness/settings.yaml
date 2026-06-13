@@ -22,11 +22,6 @@ models:
     ref: platform/qwen_qwen3.5-397b-a17b
     temperature: 0.2
     top_p: 0.8
-imports:
-  tools:
-    - eduqg-question-generator
-  skills:
-    - eduqg-question-generator
 engine:
   session_memory:
     enabled: true

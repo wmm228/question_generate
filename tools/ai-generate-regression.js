@@ -261,44 +261,25 @@ function run() {
   const contract = readContractDocument();
   assert(contract.main_agent === "question-orchestrator", "main_agent should be question-orchestrator");
   assert(contract.runtime_id === "tutor-question-generation", "runtime_id should be tutor-question-generation");
-  assert(Array.isArray(contract.subagents) && contract.subagents.length === 8, "contract should keep all 8 migrated subagents");
-  assert(Array.isArray(contract.tools) && contract.tools.length === 9, "contract should keep all 9 migrated tools");
+  assert(Array.isArray(contract.subagents) && contract.subagents.length === 3, "contract should expose 3 OAH subagents");
   for (const agent of [
-    "spec-normalizer",
-    "intent-recognizer",
-    "text-question-generator",
-    "visual-question-generator",
-    "text-question-evaluator",
-    "visual-question-evaluator",
+    "question-generator",
+    "question-evaluator",
     "student-simulator",
-    "profile-evolution",
   ]) {
-    assert(contract.subagents.includes(agent), `missing migrated subagent: ${agent}`);
+    assert(contract.subagents.includes(agent), `missing OAH subagent: ${agent}`);
   }
-  for (const tool of [
-    "validate_question_spec",
-    "generate_visual_question",
-    "run_evoq_text_question",
-    "render_question_image",
-    "simulate_student_response",
-    "evaluate_text_question",
-    "evaluate_visual_question",
-    "read_profile",
-    "write_profile",
-  ]) {
-    assert(contract.tools.includes(tool), `missing migrated tool: ${tool}`);
-    assert(isRecord(contract.tool_service), "tool_service missing");
-    assert(typeof contract.tool_service[tool] === "string", `tool_service missing endpoint for ${tool}`);
-  }
+  assert(!("tools" in contract), "tutor agent contract should not expose skill tools");
+  assert(!("tool_service" in contract), "tutor agent contract should not expose skill tool_service");
+  assert(!("tool_routing" in contract), "tutor agent contract should not expose skill tool_routing");
   for (const algorithm of ["direct", "cot", "react", "dear", "eqpr", "evoq"]) {
-    assert(isRecord(contract.tool_routing), "tool_routing missing");
-    assert(isRecord(contract.tool_routing.by_algorithm), "tool_routing.by_algorithm missing");
-    assert(Array.isArray(contract.tool_routing.by_algorithm[algorithm]), `missing algorithm route: ${algorithm}`);
+    assert(isRecord(contract.algorithm_routes), "algorithm_routes missing");
+    assert(isRecord(contract.algorithm_routes[algorithm]), `missing algorithm route: ${algorithm}`);
+    assert(contract.algorithm_routes[algorithm].strategy === algorithm, `invalid algorithm route: ${algorithm}`);
   }
   for (const contentMode of ["text", "image"]) {
-    assert(isRecord(contract.tool_routing), "tool_routing missing");
-    assert(isRecord(contract.tool_routing.by_content_mode), "tool_routing.by_content_mode missing");
-    assert(isRecord(contract.tool_routing.by_content_mode[contentMode]), `missing content-mode route: ${contentMode}`);
+    assert(isRecord(contract.content_mode_routes), "content_mode_routes missing");
+    assert(isRecord(contract.content_mode_routes[contentMode]), `missing content-mode route: ${contentMode}`);
   }
 
   const workbenchApiSource = fs.readFileSync(

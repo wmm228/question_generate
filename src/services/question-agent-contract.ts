@@ -3,26 +3,24 @@ import path from "path";
 
 import { AI_GEN_ALGORITHMS, AI_GEN_CONTENT_MODES, type AiGenAlgorithm, type AiGenContentMode } from "../types/ai-generate";
 import {
+  QUESTION_AGENT_CAPABILITIES,
   QUESTION_AGENT_ROLES,
   QUESTION_CONTROLLED_FIELD_KEYS,
-  QUESTION_TOOL_NAMES,
   type QuestionAgentAlgorithmRoute,
+  type QuestionAgentCapabilityName,
   type QuestionAgentConfirmationRequirement,
   type QuestionAgentContentModeRoute,
   type QuestionAgentContractDocument,
   type QuestionAgentFinalResponseContract,
   type QuestionAgentRoutingModel,
   type QuestionAgentRole,
-  type QuestionAgentToolService,
-  type QuestionAgentToolRouting,
   type QuestionControlledFieldKey,
-  type QuestionToolName,
 } from "../types/question-agent";
 
 const CONTRACT_HEADINGS = ["## 机器可读合同", "## Machine-Readable Contract"];
 
 const ROLE_SET = new Set<string>(QUESTION_AGENT_ROLES);
-const TOOL_SET = new Set<string>(QUESTION_TOOL_NAMES);
+const CAPABILITY_SET = new Set<string>(QUESTION_AGENT_CAPABILITIES);
 const CONTROLLED_FIELD_SET = new Set<string>(QUESTION_CONTROLLED_FIELD_KEYS);
 const CONTENT_MODE_SET = new Set<string>(AI_GEN_CONTENT_MODES);
 const ALGORITHM_SET = new Set<string>(AI_GEN_ALGORITHMS);
@@ -137,12 +135,12 @@ function parseQuestionAgentRoleArray(value: unknown, label: string): QuestionAge
   return normalizeStringArray(value, label).map((item) => parseQuestionAgentRole(item, label));
 }
 
-function parseQuestionToolNameArray(value: unknown, label: string): QuestionToolName[] {
+function parseQuestionCapabilityArray(value: unknown, label: string): QuestionAgentCapabilityName[] {
   return normalizeStringArray(value, label).map((item) => {
-    if (!TOOL_SET.has(item)) {
-      throw new Error(`${label} contains an unknown question tool: ${item}`);
+    if (!CAPABILITY_SET.has(item)) {
+      throw new Error(`${label} contains an unknown question capability: ${item}`);
     }
-    return item as QuestionToolName;
+    return item as QuestionAgentCapabilityName;
   });
 }
 
@@ -162,49 +160,32 @@ function parseContentModeRoute(value: unknown, label: string): QuestionAgentCont
   return {
     generator_agent: parseQuestionAgentRole(value.generator_agent, `${label}.generator_agent`),
     evaluator_agent: parseQuestionAgentRole(value.evaluator_agent, `${label}.evaluator_agent`),
-    generator_tools: parseQuestionToolNameArray(value.generator_tools, `${label}.generator_tools`),
-    evaluator_tools: parseQuestionToolNameArray(value.evaluator_tools, `${label}.evaluator_tools`),
+    generation_capabilities: parseQuestionCapabilityArray(
+      value.generation_capabilities,
+      `${label}.generation_capabilities`,
+    ),
+    evaluation_capabilities: parseQuestionCapabilityArray(
+      value.evaluation_capabilities,
+      `${label}.evaluation_capabilities`,
+    ),
   };
 }
 
-function parseToolRouting(value: unknown): QuestionAgentToolRouting {
+function parseContentModeRoutes(value: unknown): Record<AiGenContentMode, QuestionAgentContentModeRoute> {
   if (!isRecord(value)) {
-    throw new Error("tool_routing must be an object");
+    throw new Error("content_mode_routes must be an object");
   }
-  if (!isRecord(value.by_content_mode)) {
-    throw new Error("tool_routing.by_content_mode must be an object");
-  }
-  if (!isRecord(value.by_algorithm)) {
-    throw new Error("tool_routing.by_algorithm must be an object");
-  }
-
-  const byContentMode = {} as Record<AiGenContentMode, QuestionAgentContentModeRoute>;
+  const routes = {} as Record<AiGenContentMode, QuestionAgentContentModeRoute>;
   for (const contentMode of AI_GEN_CONTENT_MODES) {
     if (!CONTENT_MODE_SET.has(contentMode)) {
       continue;
     }
-    byContentMode[contentMode] = parseContentModeRoute(
-      value.by_content_mode[contentMode],
-      `tool_routing.by_content_mode.${contentMode}`,
+    routes[contentMode] = parseContentModeRoute(
+      value[contentMode],
+      `content_mode_routes.${contentMode}`,
     );
   }
-
-  const byAlgorithm = {} as Record<AiGenAlgorithm, QuestionToolName[]>;
-  for (const algorithm of AI_GEN_ALGORITHMS) {
-    if (!ALGORITHM_SET.has(algorithm)) {
-      continue;
-    }
-    byAlgorithm[algorithm] = parseQuestionToolNameArray(
-      value.by_algorithm[algorithm],
-      `tool_routing.by_algorithm.${algorithm}`,
-    );
-  }
-
-  return {
-    shared: parseQuestionToolNameArray(value.shared, "tool_routing.shared"),
-    by_content_mode: byContentMode,
-    by_algorithm: byAlgorithm,
-  };
+  return routes;
 }
 
 function parseRoutingModel(value: unknown): QuestionAgentRoutingModel {
@@ -249,46 +230,14 @@ function parseAlgorithmRouteMap(value: unknown): Record<AiGenAlgorithm, Question
     }
     algorithmRoutes[algorithm] = {
       strategy: algorithm,
-      required_tools: parseQuestionToolNameArray(route.required_tools, `algorithm_routes.${algorithm}.required_tools`),
+      required_capabilities: parseQuestionCapabilityArray(
+        route.required_capabilities,
+        `algorithm_routes.${algorithm}.required_capabilities`,
+      ),
       requires_student_simulation: route.requires_student_simulation === true,
     };
   }
   return algorithmRoutes;
-}
-
-function parseToolService(value: unknown): QuestionAgentToolService {
-  if (!isRecord(value)) {
-    throw new Error("tool_service must be an object");
-  }
-
-  const endpoints = {} as Record<QuestionToolName, string>;
-  for (const tool of QUESTION_TOOL_NAMES) {
-    const endpoint = normalizeString(value[tool]);
-    if (!endpoint) {
-      throw new Error(`tool_service missing endpoint for ${tool}`);
-    }
-    endpoints[tool] = endpoint;
-  }
-
-  const name = normalizeString(value.name);
-  const baseUrl = normalizeString(value.base_url);
-  const health = normalizeString(value.health);
-  const openapi = normalizeString(value.openapi);
-  const compatibilityGenerate = normalizeString(value.compatibility_generate);
-  const genericToolDispatch = normalizeString(value.generic_tool_dispatch);
-  if (!name || !baseUrl || !health || !openapi || !compatibilityGenerate || !genericToolDispatch) {
-    throw new Error("tool_service requires name, base_url, health, openapi, compatibility_generate, and generic_tool_dispatch");
-  }
-
-  return {
-    name,
-    base_url: baseUrl,
-    health,
-    openapi,
-    endpoints,
-    compatibility_generate: compatibilityGenerate,
-    generic_tool_dispatch: genericToolDispatch,
-  };
 }
 
 function parseConfirmationRequirement(value: unknown, label: string): QuestionAgentConfirmationRequirement {
@@ -377,15 +326,14 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
 
   const mainAgent = parseQuestionAgentRole(value.main_agent, "main_agent");
   const subagents = parseQuestionAgentRoleArray(value.subagents, "subagents");
-  const tools = parseQuestionToolNameArray(value.tools, "tools");
   assertExactMembers(
     subagents,
     QUESTION_AGENT_ROLES.filter((role) => role !== mainAgent),
     "subagents",
   );
-  assertExactMembers(tools, QUESTION_TOOL_NAMES, "tools");
   const routingModel = parseRoutingModel(value.routing_model);
   const algorithmRoutes = parseAlgorithmRouteMap(value.algorithm_routes);
+  const contentModeRoutes = parseContentModeRoutes(value.content_mode_routes);
 
   return {
     spec_version: specVersion,
@@ -394,7 +342,7 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     subagents,
     routing_model: routingModel,
     algorithm_routes: algorithmRoutes,
-    tools,
+    content_mode_routes: contentModeRoutes,
     runtime_candidates: normalizeStringArray(value.runtime_candidates, "runtime_candidates"),
     human_controlled_fields: parseControlledFieldArray(value.human_controlled_fields, "human_controlled_fields"),
     agent_controlled_fields: normalizeStringArray(value.agent_controlled_fields, "agent_controlled_fields"),
@@ -404,8 +352,6 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     human_controlled_rules: normalizeStringArray(value.human_controlled_rules, "human_controlled_rules"),
     decision_rules: normalizeStringArray(value.decision_rules, "decision_rules"),
     validation_rules: normalizeStringArray(value.validation_rules, "validation_rules"),
-    tool_service: parseToolService(value.tool_service),
-    tool_routing: parseToolRouting(value.tool_routing),
     final_response_contract: parseFinalResponseContract(value.final_response_contract),
   };
 }

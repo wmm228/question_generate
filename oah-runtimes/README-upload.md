@@ -12,13 +12,9 @@ tutor-question-generation/
     prompts.yaml
     agents/
       question-orchestrator.md
-      spec-normalizer.md
-      text-question-generator.md
-      visual-question-generator.md
-      text-question-evaluator.md
-      visual-question-evaluator.md
+      question-generator.md
+      question-evaluator.md
       student-simulator.md
-      profile-evolution.md
 ```
 
 上传时 zip 里必须直接包含 `AGENTS.md` 和 `.openharness/`，不要多包一层 `tutor-question-generation/` 父目录。

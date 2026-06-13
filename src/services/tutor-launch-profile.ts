@@ -21,7 +21,7 @@ function applyLocalOahProfileDefaults(): void {
   setDefaultEnv("OAH_MODEL_NAME", "platform/qwen_qwen3.5-397b-a17b");
   setDefaultEnv("OAH_MODEL_PRIORITY", "platform/qwen_qwen3.5-397b-a17b,platform/qwen_qwen3-next-80b-a3b-instruct,platform/mistralai_ministral-14b-instruct-2512,platform/deepseek-ai_deepseek-v4-flash");
   setDefaultEnv("OAH_AGENT_NAME", "question-orchestrator");
-  setDefaultEnv("OAH_INTENT_AGENT_NAME", "intent-recognizer");
+  setDefaultEnv("OAH_INTENT_AGENT_NAME", "question-orchestrator");
   setDefaultEnv("OAH_WORKSPACE_RUNTIME", "tutor-question-generation");
   setDefaultEnv("OAH_WORKSPACE_NAME", "tutor-question-generation");
   setDefaultEnv("OAH_WORKSPACE_OWNER_ID", "tutor");

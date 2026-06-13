@@ -9,26 +9,20 @@ import type {
 
 export const QUESTION_AGENT_ROLES = [
   "question-orchestrator",
-  "spec-normalizer",
-  "intent-recognizer",
-  "text-question-generator",
-  "visual-question-generator",
+  "question-generator",
+  "question-evaluator",
   "student-simulator",
-  "text-question-evaluator",
-  "visual-question-evaluator",
-  "profile-evolution",
 ] as const;
 
-export const QUESTION_TOOL_NAMES = [
-  "validate_question_spec",
-  "generate_visual_question",
-  "run_evoq_text_question",
-  "render_question_image",
-  "simulate_student_response",
-  "evaluate_text_question",
-  "evaluate_visual_question",
-  "read_profile",
-  "write_profile",
+export const QUESTION_AGENT_CAPABILITIES = [
+  "dialogue_field_extraction",
+  "portrait_ready_gating",
+  "text_generation",
+  "visual_generation",
+  "text_evaluation",
+  "visual_evaluation",
+  "evoq_generation",
+  "evoq_student_simulation",
 ] as const;
 
 export const QUESTION_SPEC_STATUSES = ["draft", "ready", "blocked"] as const;
@@ -46,7 +40,7 @@ export const QUESTION_CONTROLLED_FIELD_KEYS = [
 ] as const;
 
 export type QuestionAgentRole = (typeof QUESTION_AGENT_ROLES)[number];
-export type QuestionToolName = (typeof QUESTION_TOOL_NAMES)[number];
+export type QuestionAgentCapabilityName = (typeof QUESTION_AGENT_CAPABILITIES)[number];
 export type QuestionSpecStatus = (typeof QUESTION_SPEC_STATUSES)[number];
 export type QuestionControlledFieldKey = (typeof QUESTION_CONTROLLED_FIELD_KEYS)[number];
 
@@ -112,7 +106,7 @@ export interface QuestionGenerationContract {
   primary_agent: QuestionAgentRole;
   generator_agent: QuestionAgentRole;
   evaluator_agent: QuestionAgentRole;
-  required_tools: QuestionToolName[];
+  required_capabilities: QuestionAgentCapabilityName[];
   algorithm: AiGenAlgorithm;
   algorithm_route: QuestionAgentAlgorithmRoute;
   oah_runtime_candidates: string[];
@@ -142,7 +136,7 @@ export interface QuestionGenerationSpec {
 export interface QuestionAgentStep {
   role: QuestionAgentRole;
   action: string;
-  tools: QuestionToolName[];
+  capabilities: QuestionAgentCapabilityName[];
   blocks_generation: boolean;
 }
 
@@ -160,8 +154,7 @@ export interface QuestionAgentDesign {
     subagents: QuestionAgentRole[];
     routing_model: QuestionAgentRoutingModel;
     algorithm_routes: Record<AiGenAlgorithm, QuestionAgentAlgorithmRoute>;
-    tools: QuestionToolName[];
-    tool_service: QuestionAgentToolService;
+    content_mode_routes: Record<AiGenContentMode, QuestionAgentContentModeRoute>;
   };
   decision_rules: string[];
   recommended_oah: {
@@ -187,31 +180,15 @@ export interface QuestionAgentRoutingModel {
 
 export interface QuestionAgentAlgorithmRoute {
   strategy: AiGenAlgorithm;
-  required_tools: QuestionToolName[];
+  required_capabilities: QuestionAgentCapabilityName[];
   requires_student_simulation: boolean;
 }
 
 export interface QuestionAgentContentModeRoute {
   generator_agent: QuestionAgentRole;
   evaluator_agent: QuestionAgentRole;
-  generator_tools: QuestionToolName[];
-  evaluator_tools: QuestionToolName[];
-}
-
-export interface QuestionAgentToolRouting {
-  shared: QuestionToolName[];
-  by_content_mode: Record<AiGenContentMode, QuestionAgentContentModeRoute>;
-  by_algorithm: Record<AiGenAlgorithm, QuestionToolName[]>;
-}
-
-export interface QuestionAgentToolService {
-  name: string;
-  base_url: string;
-  health: string;
-  openapi: string;
-  endpoints: Record<QuestionToolName, string>;
-  compatibility_generate: string;
-  generic_tool_dispatch: string;
+  generation_capabilities: QuestionAgentCapabilityName[];
+  evaluation_capabilities: QuestionAgentCapabilityName[];
 }
 
 export interface QuestionAgentFinalResponseContract {
@@ -234,7 +211,7 @@ export interface QuestionAgentContractDocument {
   subagents: QuestionAgentRole[];
   routing_model: QuestionAgentRoutingModel;
   algorithm_routes: Record<AiGenAlgorithm, QuestionAgentAlgorithmRoute>;
-  tools: QuestionToolName[];
+  content_mode_routes: Record<AiGenContentMode, QuestionAgentContentModeRoute>;
   runtime_candidates: string[];
   human_controlled_fields: QuestionControlledFieldKey[];
   agent_controlled_fields: string[];
@@ -242,8 +219,6 @@ export interface QuestionAgentContractDocument {
   human_controlled_rules: string[];
   decision_rules: string[];
   validation_rules: string[];
-  tool_service: QuestionAgentToolService;
-  tool_routing: QuestionAgentToolRouting;
   final_response_contract: QuestionAgentFinalResponseContract;
 }
 

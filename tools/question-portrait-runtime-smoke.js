@@ -90,7 +90,7 @@ function smokeIntentConfig() {
     OAH_INTENT_AGENT_NAME: "",
   }, () => {
     const config = getOahIntentConfig();
-    assert(config.intentAgentName === "intent-recognizer", "intent agent should default to intent-recognizer");
+    assert(config.intentAgentName === "question-orchestrator", "intent agent should default to question-orchestrator");
     assert(config.intentModel === "platform/main-model", "intent model should fall back to OAH_MODEL_NAME");
   });
 

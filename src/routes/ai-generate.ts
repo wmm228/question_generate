@@ -242,7 +242,7 @@ export function attachAiGenerateRoutes(
         plan_id: normalizedSpec.plan.plan_id,
         generator_agent: normalizedSpec.spec.generation_contract.generator_agent,
         evaluator_agent: normalizedSpec.spec.generation_contract.evaluator_agent,
-        required_tools: normalizedSpec.spec.generation_contract.required_tools,
+        required_capabilities: normalizedSpec.spec.generation_contract.required_capabilities,
       });
 
       const result = await generateAiQuestion(

@@ -13,6 +13,7 @@ import {
 } from "../types/ai-generate";
 import {
   type QuestionAgentDesign,
+  type QuestionAgentCapabilityName,
   type QuestionAgentPlan,
   type QuestionAgentRole,
   type EvoqGenerationConfig,
@@ -21,7 +22,6 @@ import {
   type QuestionProfileNormalizeResponse,
   type QuestionSpecInput,
   type QuestionSpecNormalizeResponse,
-  type QuestionToolName,
   type StudentMasterySignal,
   type StudentProfile,
   type TeacherPreferenceProfile,
@@ -300,23 +300,24 @@ function buildSpecId(payload: AiGenPayload, requestId: string): string {
 
 function resolveGeneratorAgent(payload: AiGenPayload): QuestionAgentRole {
   const contract = getQuestionAgentContract();
-  return contract.tool_routing.by_content_mode[payload.content_mode].generator_agent;
+  return contract.content_mode_routes[payload.content_mode].generator_agent;
 }
 
 function resolveEvaluatorAgent(payload: AiGenPayload): QuestionAgentRole {
   const contract = getQuestionAgentContract();
-  return contract.tool_routing.by_content_mode[payload.content_mode].evaluator_agent;
+  return contract.content_mode_routes[payload.content_mode].evaluator_agent;
 }
 
-function resolveRequiredTools(payload: AiGenPayload): QuestionToolName[] {
+function resolveRequiredCapabilities(payload: AiGenPayload): QuestionAgentCapabilityName[] {
   const contract = getQuestionAgentContract();
-  const modeRouting = contract.tool_routing.by_content_mode[payload.content_mode];
+  const modeRouting = contract.content_mode_routes[payload.content_mode];
   return Array.from(
-    new Set<QuestionToolName>([
-      ...contract.tool_routing.shared,
-      ...modeRouting.generator_tools,
-      ...modeRouting.evaluator_tools,
-      ...contract.tool_routing.by_algorithm[payload.algorithm],
+    new Set<QuestionAgentCapabilityName>([
+      "dialogue_field_extraction",
+      "portrait_ready_gating",
+      ...modeRouting.generation_capabilities,
+      ...modeRouting.evaluation_capabilities,
+      ...contract.algorithm_routes[payload.algorithm].required_capabilities,
     ]),
   );
 }
@@ -327,11 +328,11 @@ function buildGenerationContract(payload: AiGenPayload): QuestionGenerationContr
     primary_agent: contract.main_agent,
     generator_agent: resolveGeneratorAgent(payload),
     evaluator_agent: resolveEvaluatorAgent(payload),
-    required_tools: resolveRequiredTools(payload),
+    required_capabilities: resolveRequiredCapabilities(payload),
     algorithm: payload.algorithm,
     algorithm_route: {
       ...contract.algorithm_routes[payload.algorithm],
-      required_tools: [...contract.algorithm_routes[payload.algorithm].required_tools],
+      required_capabilities: [...contract.algorithm_routes[payload.algorithm].required_capabilities],
     },
     oah_runtime_candidates: [...contract.runtime_candidates],
   };
@@ -340,11 +341,11 @@ function buildGenerationContract(payload: AiGenPayload): QuestionGenerationContr
 function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
   const contract = getQuestionAgentContract();
   const blocksGeneration = spec.status !== "ready";
-  const modeRouting = contract.tool_routing.by_content_mode[spec.content_mode];
-  const generatorTools = Array.from(
-    new Set<QuestionToolName>([
-      ...modeRouting.generator_tools,
-      ...contract.tool_routing.by_algorithm[spec.algorithm],
+  const modeRouting = contract.content_mode_routes[spec.content_mode];
+  const generatorCapabilities = Array.from(
+    new Set<QuestionAgentCapabilityName>([
+      ...modeRouting.generation_capabilities,
+      ...contract.algorithm_routes[spec.algorithm].required_capabilities,
     ]),
   );
   const evoqSimulationStep: QuestionAgentPlan["steps"] = spec.algorithm === "evoq"
@@ -352,7 +353,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
       {
         role: "student-simulator",
         action: "Run EvoQ IRT virtual student simulation for candidate selection and difficulty fit.",
-        tools: ["simulate_student_response"],
+        capabilities: ["evoq_student_simulation"],
         blocks_generation: false,
       },
     ]
@@ -366,13 +367,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
       {
         role: contract.main_agent,
         action: "Extract teacher-dialogue fields and update the portrait/profile state before generation.",
-        tools: ["read_profile"],
-        blocks_generation: blocksGeneration,
-      },
-      {
-        role: "spec-normalizer",
-        action: "Normalize request into edu-question-spec.v1 and validate required fields.",
-        tools: ["validate_question_spec"],
+        capabilities: ["dialogue_field_extraction", "portrait_ready_gating"],
         blocks_generation: blocksGeneration,
       },
       {
@@ -380,7 +375,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
         action: spec.content_mode === "image"
           ? "Generate a visual question draft and visual dependency contract."
           : "Generate a text question draft.",
-        tools: generatorTools,
+        capabilities: generatorCapabilities,
         blocks_generation: false,
       },
       ...evoqSimulationStep,
@@ -389,13 +384,7 @@ function buildPlan(spec: QuestionGenerationSpec): QuestionAgentPlan {
         action: spec.content_mode === "image"
           ? "Evaluate schema validity, educational quality, difficulty fit, SVG safety, and image relevance."
           : "Evaluate schema validity, educational quality, difficulty fit, and answer correctness.",
-        tools: [...modeRouting.evaluator_tools],
-        blocks_generation: false,
-      },
-      {
-        role: "profile-evolution",
-        action: "Persist generated question records and profile updates after generation.",
-        tools: ["write_profile"],
+        capabilities: [...modeRouting.evaluation_capabilities],
         blocks_generation: false,
       },
     ],
@@ -468,12 +457,20 @@ export function buildQuestionAgentDesign(): QuestionAgentDesign {
           algorithm,
           {
             ...route,
-            required_tools: [...route.required_tools],
+            required_capabilities: [...route.required_capabilities],
           },
         ]),
       ) as typeof contract.algorithm_routes,
-      tools: [...contract.tools],
-      tool_service: contract.tool_service,
+      content_mode_routes: Object.fromEntries(
+        Object.entries(contract.content_mode_routes).map(([contentMode, route]) => [
+          contentMode,
+          {
+            ...route,
+            generation_capabilities: [...route.generation_capabilities],
+            evaluation_capabilities: [...route.evaluation_capabilities],
+          },
+        ]),
+      ) as typeof contract.content_mode_routes,
     },
     decision_rules: [...contract.decision_rules],
     recommended_oah: {

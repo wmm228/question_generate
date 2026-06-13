@@ -89,7 +89,7 @@ export function getOahIntentConfig(): OahIntentConfig {
   const core = getOahCoreConfig();
   return {
     ...core,
-    intentAgentName: trim(process.env.OAH_INTENT_AGENT_NAME) || "intent-recognizer",
+    intentAgentName: trim(process.env.OAH_INTENT_AGENT_NAME) || "question-orchestrator",
     intentModel: trim(process.env.OAH_INTENT_MODEL_NAME) || core.model,
   };
 }
