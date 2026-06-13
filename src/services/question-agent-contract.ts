@@ -10,6 +10,7 @@ import {
   type QuestionAgentContentModeRoute,
   type QuestionAgentContractDocument,
   type QuestionAgentFinalResponseContract,
+  type QuestionAgentPublicGroup,
   type QuestionAgentRole,
   type QuestionAgentToolService,
   type QuestionAgentToolRouting,
@@ -221,6 +222,31 @@ function parseAlgorithmAgentMap(value: unknown): Record<AiGenAlgorithm, string> 
   return algorithmAgents;
 }
 
+function parsePublicAgentGroups(value: unknown): QuestionAgentPublicGroup[] {
+  if (!Array.isArray(value)) {
+    throw new Error("public_agent_groups must be an array");
+  }
+
+  return value.map((item, index) => {
+    if (!isRecord(item)) {
+      throw new Error(`public_agent_groups[${index}] must be an object`);
+    }
+    const name = normalizeString(item.name);
+    const owner = normalizeString(item.owner);
+    const members = normalizeStringArray(item.members, `public_agent_groups[${index}].members`);
+    const purpose = normalizeString(item.purpose);
+    if (!name || !owner || members.length === 0 || !purpose) {
+      throw new Error(`public_agent_groups[${index}] requires name, owner, members, and purpose`);
+    }
+    return {
+      name,
+      owner,
+      members,
+      purpose,
+    };
+  });
+}
+
 function parseToolService(value: unknown): QuestionAgentToolService {
   if (!isRecord(value)) {
     throw new Error("tool_service must be an object");
@@ -350,6 +376,7 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
   );
   assertExactMembers(tools, QUESTION_TOOL_NAMES, "tools");
   const algorithmAgents = parseAlgorithmAgentMap(value.algorithm_agents);
+  const publicAgentGroups = parsePublicAgentGroups(value.public_agent_groups);
 
   return {
     spec_version: specVersion,
@@ -357,6 +384,8 @@ function parseQuestionAgentContractDocument(value: unknown): QuestionAgentContra
     main_agent: mainAgent,
     subagents,
     algorithm_agents: algorithmAgents,
+    public_agent_groups: publicAgentGroups,
+    compatibility_policy: normalizeStringArray(value.compatibility_policy, "compatibility_policy"),
     tools,
     runtime_candidates: normalizeStringArray(value.runtime_candidates, "runtime_candidates"),
     human_controlled_fields: parseControlledFieldArray(value.human_controlled_fields, "human_controlled_fields"),

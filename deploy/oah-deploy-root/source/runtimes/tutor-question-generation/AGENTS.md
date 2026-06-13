@@ -27,6 +27,67 @@
     "eqpr": "eqpr-question-agent",
     "evoq": "evoq-question-agent"
   },
+  "public_agent_groups": [
+    {
+      "name": "orchestrator",
+      "owner": "question-orchestrator",
+      "members": [
+        "question-orchestrator",
+        "spec-normalizer",
+        "intent-recognizer"
+      ],
+      "purpose": "对话抽字段、更新 portrait/profile、归一化 spec、执行 ready gating 和路由。"
+    },
+    {
+      "name": "algorithm-generation",
+      "owner": "question-generator",
+      "members": [
+        "direct-question-agent",
+        "cot-question-agent",
+        "react-question-agent",
+        "dear-question-agent",
+        "eqpr-question-agent",
+        "evoq-question-agent",
+        "text-question-generator",
+        "visual-question-generator"
+      ],
+      "purpose": "保留六种核心算法能力，按教师选择分派到文本或图文生成策略。"
+    },
+    {
+      "name": "question-evaluation",
+      "owner": "question-evaluator",
+      "members": [
+        "text-question-evaluator",
+        "visual-question-evaluator"
+      ],
+      "purpose": "统一评估答案正确性、难度匹配、schema 合规和图文相关性。"
+    },
+    {
+      "name": "evoq-student-simulation",
+      "owner": "student-simulator",
+      "members": [
+        "student-simulator",
+        "simulate_student_response"
+      ],
+      "purpose": "EvoQ 必跑 IRT 虚拟学生模拟，不作为可选后处理。"
+    },
+    {
+      "name": "profile-persistence",
+      "owner": "profile-store",
+      "members": [
+        "profile-evolution",
+        "read_profile",
+        "write_profile"
+      ],
+      "purpose": "画像持久化能力；Tutor 产品流由 portrait store 承担，独立 OAH/skill 服务由 read_profile/write_profile 承担。"
+    }
+  ],
+  "compatibility_policy": [
+    "对外按 public_agent_groups 理解和展示；不要把 8 个 subagents 当成产品层必须暴露的 8 个独立智能体。",
+    "subagents 和 9 个原工具名保留为内部兼容合同，避免破坏 Tutor 前端、回归脚本和 Docker/OAH 部署。",
+    "收口阶段只合并暴露面和文档口径，不删除六算法、不删除画像 ready gating、不删除 EvoQ 学生模拟。",
+    "后续如需真正重命名或删除兼容角色，必须先迁移前端、测试、OAH settings 和部署脚本。"
+  ],
   "tools": [
     "validate_question_spec",
     "generate_visual_question",
@@ -223,16 +284,16 @@
 
 ## 架构说明
 
-本运行时采用“1 个主智能体 + 8 个子智能体 + 9 个工具”的结构：
+本运行时采用收口后的对外结构：`1 个主智能体 + 6 个算法智能体 + 4 类服务能力`。
 
-- `question-orchestrator` 与教师对话，确认教师控制的出题规格，并负责路由。
-- `spec-normalizer` 将教师意图转换为 `edu-question-spec.v1`，并识别缺失字段。
-- `intent-recognizer` 在规格归一化后判断当前轮是否授权立即生成题目。
-- `text-question-generator` 生成纯文本题。
-- `visual-question-generator` 生成图文题和 Manim 代码。
-- `text-question-evaluator` 评估纯文本题。
-- `visual-question-evaluator` 评估图文题、图片相关性和 Manim 渲染安全性。
-- `student-simulator` 和 `profile-evolution` 提供可选的个性化与画像信号。
+- 主智能体：`question-orchestrator` 负责教师对话、字段抽取、画像/spec ready gating 和路由。
+- 六算法智能体：`direct-question-agent`、`cot-question-agent`、`react-question-agent`、`dear-question-agent`、`eqpr-question-agent`、`evoq-question-agent` 是核心能力，不能删。
+- 生成服务：`text-question-generator` 与 `visual-question-generator` 是内部兼容角色，对外收口为 question-generator。
+- 评估服务：`text-question-evaluator` 与 `visual-question-evaluator` 是内部兼容角色，对外收口为 question-evaluator。
+- EvoQ 学生模拟：`student-simulator` 是 EvoQ 必需能力，必须调用 `simulate_student_response`。
+- 画像持久化：`profile-evolution`、`read_profile`、`write_profile` 是画像持久化能力；Tutor 产品流主要由 `portrait_id` 和 portrait store 落地。
+
+机器可读合同中的 8 个 `subagents` 和 9 个工具名是兼容层，不代表产品层必须暴露 8 个独立智能体，也不代表每次出题都全部调用。
 
 教师控制字段必须来自教师请求、业务请求或业务默认值，不能由画像推断覆盖：学科、知识点、难度、题型、内容模式、算法和配图要求。
 

@@ -159,6 +159,7 @@ export interface QuestionAgentDesign {
     main_agent: QuestionAgentRole;
     subagents: QuestionAgentRole[];
     algorithm_agents: Record<AiGenAlgorithm, string>;
+    public_agent_groups: QuestionAgentPublicGroup[];
     tools: QuestionToolName[];
     tool_service: QuestionAgentToolService;
   };
@@ -175,6 +176,13 @@ export interface QuestionAgentConfirmationRequirement {
   field: QuestionControlledFieldKey;
   when: "always" | "image_only";
   message: string;
+}
+
+export interface QuestionAgentPublicGroup {
+  name: string;
+  owner: string;
+  members: string[];
+  purpose: string;
 }
 
 export interface QuestionAgentContentModeRoute {
@@ -219,6 +227,8 @@ export interface QuestionAgentContractDocument {
   main_agent: QuestionAgentRole;
   subagents: QuestionAgentRole[];
   algorithm_agents: Record<AiGenAlgorithm, string>;
+  public_agent_groups: QuestionAgentPublicGroup[];
+  compatibility_policy: string[];
   tools: QuestionToolName[];
   runtime_candidates: string[];
   human_controlled_fields: QuestionControlledFieldKey[];

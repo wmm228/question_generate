@@ -455,6 +455,7 @@ export function buildQuestionAgentDesign(): QuestionAgentDesign {
       main_agent: contract.main_agent,
       subagents: [...contract.subagents],
       algorithm_agents: { ...contract.algorithm_agents },
+      public_agent_groups: [...contract.public_agent_groups],
       tools: [...contract.tools],
       tool_service: contract.tool_service,
     },
