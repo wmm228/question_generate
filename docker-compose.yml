@@ -5,21 +5,16 @@ services:
       dockerfile: Dockerfile.dev
     image: oah-dev:latest
     restart: unless-stopped
-    depends_on:
-      eduqg-tool:
-        condition: service_healthy
     environment:
-      NODE_OPTIONS: "--max-old-space-size=4096"
+      NODE_OPTIONS: "--max-old-space-size=8192"
       OAH_NATIVE_WORKSPACE_SYNC: "0"
       OAH_NATIVE_WORKSPACE_SYNC_PERSISTENT: "0"
     volumes:
       - ./oah/server.docker.yaml:/config/server.docker.yaml:ro
       - ./deploy/oah-deploy-root/source/models:/data/models:ro
       - ./deploy/oah-deploy-root/source/runtimes:/data/runtimes:ro
-      - ./deploy/oah-deploy-root/source/tools:/data/tools:ro
-      - ./deploy/oah-deploy-root/source/skills:/data/skills:ro
-      - oah_runtime_state:/data/runtime-state
-      - oah_workspace_data:/data/workspaces
+      - oah_agent_runtime_state:/data/runtime-state
+      - oah_agent_workspace_data:/data/workspaces
     healthcheck:
       test:
         [
@@ -32,41 +27,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
-
-  eduqg-tool:
-    image: node:24-alpine
-    restart: unless-stopped
-    working_dir: /app
-    command:
-      [
-        "node",
-        "eduqg-question-generator/scripts/entrypoint.mjs",
-        "--serve",
-        "--mock",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8789"
-      ]
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:8789/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    env_file:
-      - .env.docker
-      - path: .env.docker.local
-        required: false
-    volumes:
-      - ../skill-version:/app:ro
-      - eduqg_tool_output:/app/eduqg-question-generator/out
 
   tutor:
     build:
@@ -127,9 +87,8 @@ services:
       start_period: 10s
 
 volumes:
-  oah_runtime_state:
-  oah_workspace_data:
-  eduqg_tool_output:
+  oah_agent_runtime_state:
+  oah_agent_workspace_data:
   postgres_data:
   tutor_runtime_state:
   tutor_logs:
