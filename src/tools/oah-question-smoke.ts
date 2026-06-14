@@ -1,3 +1,6 @@
+import * as http from "node:http";
+import * as https from "node:https";
+
 interface RequestResult {
   status: number;
   ok: boolean;
@@ -21,42 +24,94 @@ async function sleep(ms: number): Promise<void> {
   });
 }
 
+function normalizeHeaders(headers: unknown): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+  if (
+    typeof headers === "object"
+    && "entries" in headers
+    && typeof (headers as { entries?: unknown }).entries === "function"
+  ) {
+    return Object.fromEntries((headers as { entries: () => Iterable<[string, string]> }).entries());
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+  if (typeof headers !== "object") {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(headers as Record<string, unknown>).map(([key, value]) => [key, String(value)]),
+  );
+}
+
 async function requestJson(
   baseUrl: string,
-  path: string,
+  requestPath: string,
   init: RequestInit = {},
   timeoutMs = 30000,
 ): Promise<RequestResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      signal: controller.signal,
+  return new Promise<RequestResult>((resolve, reject) => {
+    const target = new URL(requestPath, baseUrl);
+    const body = typeof init.body === "string" || Buffer.isBuffer(init.body)
+      ? init.body
+      : undefined;
+    const headers = normalizeHeaders(init.headers);
+    if (body && !Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) {
+      headers["Content-Length"] = String(Buffer.byteLength(body));
+    }
+
+    const client = target.protocol === "https:" ? https : http;
+    const timeout = setTimeout(() => {
+      request.destroy(new Error(`${requestPath} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    const request = client.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port,
+        path: `${target.pathname}${target.search}`,
+        method: init.method || "GET",
+        headers,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on("end", () => {
+          clearTimeout(timeout);
+          const text = Buffer.concat(chunks).toString("utf8");
+          let parsedBody: unknown = null;
+          if (text.trim()) {
+            try {
+              parsedBody = JSON.parse(text);
+            } catch {
+              parsedBody = text;
+            }
+          }
+          const status = response.statusCode ?? 0;
+          resolve({
+            status,
+            ok: status >= 200 && status < 300,
+            body: parsedBody,
+          });
+        });
+      },
+    );
+
+    request.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
     });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`${path} timed out after ${timeoutMs}ms`);
+
+    if (body) {
+      request.write(body);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-  const text = await response.text();
-  let body: unknown = null;
-  if (text.trim()) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
-    }
-  }
-  return {
-    status: response.status,
-    ok: response.ok,
-    body,
-  };
+    request.end();
+  });
 }
 
 async function main(): Promise<void> {
