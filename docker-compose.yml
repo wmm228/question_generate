@@ -1,7 +1,7 @@
 services:
   oah:
     build:
-      context: ../OpenAgentHarness-master
+      context: ./vendor/open-agent-harness
       dockerfile: Dockerfile.dev
     image: oah-dev:latest
     restart: unless-stopped

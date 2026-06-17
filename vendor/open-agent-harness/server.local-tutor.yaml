@@ -1,0 +1,30 @@
+server:
+  host: 0.0.0.0
+  port: 8787
+
+storage: {}
+
+paths:
+  workspace_dir: D:/tutor-tutor/OpenAgentHarness-master/.local-state/workspaces
+  runtime_state_dir: D:/tutor-tutor/OpenAgentHarness-master/.local-state/.openharness
+  runtime_dir: D:/tutor-tutor/tutor/deploy/oah-deploy-root/source/runtimes
+  model_dir: D:/tutor-tutor/oah_260421_v2/test_oah_server/source/models
+  tool_dir: D:/tutor-tutor/tutor/deploy/oah-deploy-root/source/tools
+  skill_dir: D:/tutor-tutor/tutor/deploy/oah-deploy-root/source/skills
+
+workers:
+  embedded:
+    min_count: 1
+    max_count: 2
+    scale_interval_ms: 1000
+    idle_ttl_ms: 30000
+    scale_up_window: 1
+    scale_down_window: 2
+    cooldown_ms: 1000
+    reserved_capacity_for_subagent: 0
+
+sandbox:
+  provider: embedded
+
+llm:
+  default_model: kimi-k26
