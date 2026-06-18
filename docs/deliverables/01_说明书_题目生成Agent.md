@@ -280,6 +280,20 @@ npm run start
 npm run dev
 ```
 
+如果需要在一台新机器上完整部署 Tutor + OAH，本仓库已经包含 OAH 服务源码：
+
+```text
+vendor/open-agent-harness/
+```
+
+可直接使用 Docker Compose 启动完整栈：
+
+```bash
+docker compose up -d --build
+```
+
+启动前需要根据 `.env.docker.local.example` 创建 `.env.docker.local`，填写 PostgreSQL 密码、认证服务密钥和模型服务密钥。
+
 ## 9. 常见问题
 
 ### 9.1 为什么缺少字段时不能直接生成

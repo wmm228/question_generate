@@ -277,7 +277,8 @@ Browser
 1. Tutor 是 Web 服务和业务入口。
 2. OAH 是 Agent runtime。
 3. 模型配置通过环境变量和 OAH workspace 管理。
-4. 部署时需要保证 Tutor 能访问 `OAH_BASE_URL`。
+4. 远程 OAH 模式下，需要保证 Tutor 能访问 `OAH_BASE_URL`。
+5. 完整同机部署时，仓库内置 `vendor/open-agent-harness`，可通过 `docker compose up -d --build` 同时启动 Tutor、OAH 和 PostgreSQL。
 
 ### 第 16 页：上线前检查
 

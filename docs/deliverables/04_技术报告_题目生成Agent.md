@@ -58,6 +58,7 @@ Browser
 | `src/services/oah-config.ts` | OAH 环境变量配置 |
 | `oah-runtimes/tutor-question-generation/AGENTS.md` | OAH runtime 合约 |
 | `deploy/oah-deploy-root/` | OAH 部署根目录模板 |
+| `vendor/open-agent-harness/` | 随仓库交付的 OAH 服务源码，用于完整同机 Docker 部署 |
 | `skill-version/` | 独立 skill 版本和工具边界 |
 
 ## 5. Agent 合约
@@ -290,6 +291,28 @@ npm run start
 1. 4 核 8GB 起步。
 2. Docker 可用。
 3. OAH deploy-root 已同步 runtime、models、tools。
+
+当前仓库已经内置 OAH 服务源码，路径为：
+
+```text
+vendor/open-agent-harness/
+```
+
+`docker-compose.yml` 中的 OAH 构建上下文已经指向该目录：
+
+```yaml
+services:
+  oah:
+    build:
+      context: ./vendor/open-agent-harness
+      dockerfile: Dockerfile.dev
+```
+
+因此另一台电脑只需要 clone 当前仓库，配置 `.env.docker.local`，即可启动完整栈：
+
+```bash
+docker compose up -d --build
+```
 
 ## 14. OAH deploy-root
 
